@@ -1,0 +1,1268 @@
+/*
+ * Twitch Chat X-Ray — UI styles.
+ *
+ * Everything is prefixed with .tcx- or scoped to the Tippy "twitch" theme so
+ * native Twitch styles are never touched. Colours fall back to a sensible dark
+ * palette when Twitch CSS variables are unavailable.
+ */
+
+/* ------------------------------------------------------------------------- */
+/* Bot badge                                                                  */
+/* ------------------------------------------------------------------------- */
+
+.tcx-bot-badge {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 2px;
+  margin-right: 5px;
+  padding: 1px 5px;
+  border: 1px solid hsla(var(--tcx-bot-hue, 52), 70%, 28%, 0.35);
+  border-radius: 4px;
+  background: linear-gradient(
+    135deg,
+    hsl(var(--tcx-bot-hue, 52), 95%, 66%),
+    hsl(var(--tcx-bot-hue, 52), 85%, 52%)
+  );
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  color: #17171a;
+  font-family: inherit;
+  font-size: 9.5px;
+  font-weight: 800;
+  font-style: normal;
+  line-height: 1.35;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: help;
+  user-select: none;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.tcx-bot-badge:hover {
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.38);
+  transform: translateY(-1px);
+}
+
+.tcx-bot-badge:focus-visible,
+.tcx-real-viewers:focus-visible,
+.tcx-stats:focus-visible {
+  outline: 2px solid var(--color-accent, #9147ff);
+  outline-offset: 2px;
+}
+
+.chat-line__message.tcx-muted {
+  opacity: 0.35 !important;
+  transition: opacity 120ms ease-out;
+}
+
+.chat-line__message.tcx-hidden {
+  /* row-visibility.js sets display:none inline immediately. */
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Exact real-viewer suffix under the player                                  */
+/* ------------------------------------------------------------------------- */
+
+.tcx-real-viewers {
+  display: inline-flex;
+  align-items: baseline;
+  margin-left: 4px;
+  color: var(--color-text-alt, #adadb8);
+  font-family: inherit;
+  font-size: 0.9em;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+  cursor: help;
+  user-select: none;
+  vertical-align: baseline;
+  opacity: 0.92;
+  transition: color 120ms ease, opacity 120ms ease;
+}
+
+.tcx-real-viewers:hover {
+  color: var(--color-text-base, #efeff1);
+  opacity: 1;
+}
+
+/* Warning (low engagement, churn) — warm orange. */
+.tcx-real-viewers--alert {
+  color: #ff9b76;
+  opacity: 1;
+}
+
+.tcx-real-viewers--alert:hover {
+  color: #ffb997;
+}
+
+/* A bot wave is the loudest passive signal: the whole suffix turns red and
+   gently pulses so it is noticed without any click. */
+.tcx-real-viewers--wave {
+  color: #ff5c5c;
+  font-weight: 700;
+  opacity: 1;
+  animation: tcx-wave-pulse 1.6s ease-in-out infinite;
+}
+
+.tcx-real-viewers--wave:hover {
+  color: #ff8080;
+}
+
+/* "Загружаю… 66%" / "Loading… 66%".
+   The animated ellipsis belongs to the *word*, not to the whole counter: it is
+   rendered after the nested .tcx-real-viewers__word span. Putting it on the
+   counter itself (::after) made the dots appear after the percentage, and the
+   percentage itself jumped around while the dot count changed. Keeping the
+   percentage last keeps its digits still. The dots live in a fixed-width box so
+   the following text never shifts. */
+.tcx-real-viewers--loading {
+  color: var(--color-text-alt, #adadb8);
+  opacity: 0.95;
+}
+
+.tcx-real-viewers__word {
+  display: inline;
+}
+
+/*
+ * The dots box must sit on the text baseline. An inline-block with a fixed
+ * width has its own line box, so the "." glyphs were rendered centered in it
+ * and appeared to float above the word. Forcing line-height: inherit makes the
+ * box exactly as tall as the surrounding text, which pins the dots to the same
+ * baseline as "Загружаю".
+ */
+.tcx-real-viewers__word::after {
+  content: "";
+  display: inline-block;
+  width: 1.2em;
+  height: 1em;
+  margin-left: 1px;
+  overflow: hidden;
+  line-height: inherit;
+  text-align: left;
+  vertical-align: baseline;
+  animation: tcx-loading-dots 1.2s steps(1, end) infinite;
+}
+
+.tcx-real-viewers__percent {
+  display: inline-block;
+  min-width: 2.4em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tcx-real-viewers--nodata {
+  color: #ff9b76;
+  opacity: 0.8;
+}
+
+@keyframes tcx-loading-dots {
+  0% {
+    content: ".";
+  }
+  25% {
+    content: "..";
+  }
+  50% {
+    content: "...";
+  }
+  75% {
+    content: "....";
+  }
+  100% {
+    content: ".";
+  }
+}
+
+@keyframes tcx-wave-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Live summary strip                                                         */
+/* ------------------------------------------------------------------------- */
+
+.tcx-stats {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 9px;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 100%;
+  margin: 0;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--color-border-base, rgba(255, 255, 255, 0.1));
+  background: linear-gradient(
+    180deg,
+    var(--color-background-base, #18181b) 0%,
+    var(--color-background-alt, #1f1f23) 100%
+  );
+  color: var(--color-text-alt, #adadb8);
+  font-family: inherit;
+  font-size: 10.5px;
+  line-height: 1.35;
+  letter-spacing: 0.005em;
+  user-select: none;
+  cursor: help;
+}
+
+.tcx-stats--sticky {
+  position: sticky;
+  top: 0;
+}
+
+.tcx-stats__metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.tcx-stats__metric b {
+  color: var(--color-text-base, #efeff1);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tcx-stats__sep {
+  width: 1px;
+  height: 10px;
+  align-self: center;
+  background: var(--color-border-base, rgba(255, 255, 255, 0.2));
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
+  overflow: hidden;
+}
+
+.tcx-stats__wave {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 1px;
+  padding: 0 5px;
+  border: 1px solid rgba(255, 86, 86, 0.5);
+  border-radius: 4px;
+  background: rgba(255, 86, 86, 0.12);
+  color: #ff8a8a;
+  font-size: 9.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tcx-stats__wave[hidden] {
+  display: none !important;
+}
+
+.tcx-stats__label {
+  color: inherit;
+}
+
+/* Loading percentage of the viewer estimate, visible without hovering. */
+.tcx-stats__loading {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 0 5px;
+  border: 1px solid var(--color-border-base, rgba(255, 255, 255, 0.16));
+  border-radius: 4px;
+  color: var(--color-text-alt, #adadb8);
+  font-size: 9.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tcx-stats__loading b {
+  color: var(--color-text-base, #efeff1);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  /* Fixed width keeps the strip from twitching between 9% and 100%. */
+  min-width: 2.6em;
+  text-align: right;
+}
+
+/* The animated dots belong to the word, never to the badge: on the badge they
+   would render after the percentage. */
+.tcx-stats__loading-word::after {
+  content: "";
+  display: inline-block;
+  width: 1.2em;
+  height: 1em;
+  margin-left: 1px;
+  overflow: hidden;
+  line-height: inherit;
+  text-align: left;
+  vertical-align: baseline;
+  animation: tcx-loading-dots 1.2s steps(1, end) infinite;
+}
+
+.tcx-stats__loading[hidden] {
+  display: none !important;
+}
+
+.tcx-stats--loading .tcx-stats__loading b {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The same passive red signal as the viewer counter: a bot wave, or a
+   suspicious share that reached the user's own threshold. */
+.tcx-stats--alert {
+  border-bottom-color: rgba(255, 92, 92, 0.6);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 92, 92, 0.14) 0%,
+    var(--color-background-alt, #1f1f23) 100%
+  );
+}
+
+.tcx-stats--alert .tcx-stats__metric b,
+.tcx-stats--alert .tcx-stats__metric .tcx-stats__label {
+  color: #ff8a8a;
+}
+
+.tcx-stats--alert .tcx-stats__loading b {
+  color: #ff8a8a;
+}
+
+.tcx-stats[data-wave="1"] {
+  border-bottom-color: rgba(255, 86, 86, 0.7);
+}
+
+.tcx-stats[data-wave="1"] .tcx-stats__wave {
+  animation: tcx-wave-pulse 1.6s ease-in-out infinite;
+}
+
+.tcx-stats__value--alert {
+  color: #ff5c5c !important;
+}
+
+/* Bot-wave badges and the rows they belong to. */
+.tcx-bot-badge--wave {
+  border-color: rgba(255, 92, 92, 0.65) !important;
+  background: linear-gradient(135deg, #ff7575, #e01f1f) !important;
+  color: #ffffff !important;
+}
+
+.chat-line__message[data-tcx-wave="1"] .chat-line__username,
+.chat-line__message[data-tcx-wave="1"] .chat-author__display-name {
+  color: #ff8a8a !important;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Settings entry row inside Twitch's own Chat Settings menu                 */
+/* ------------------------------------------------------------------------- */
+
+/* One plain row appended after the last native option, like BetterTTV's
+   "BetterTV Settings": same left alignment, same text size, a trailing
+   chevron so it reads as "opens another screen". Typography is inherited
+   from Twitch so the row never looks foreign. */
+.tcx-settings-row {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-base, #efeff1);
+  font: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  line-height: inherit;
+  letter-spacing: inherit;
+  text-align: left !important;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.tcx-settings-row:hover,
+.tcx-settings-row:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-base, #efeff1);
+}
+
+.tcx-settings-row:focus-visible {
+  outline: 2px solid var(--color-accent, #9147ff);
+  outline-offset: -2px;
+}
+
+.tcx-settings-row__label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tcx-settings-row__chevron {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  opacity: 0.8;
+}
+
+/* Separator above our group, like the rule Twitch/BTTV use between blocks. */
+.tcx-settings-row--native {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin-top: 4px;
+  padding-top: 12px;
+  border-radius: 0;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Floating "open settings" button, pinned into the chat header              */
+/* ------------------------------------------------------------------------- */
+
+.tcx-settings-button {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  margin: 0 0 0 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-alt, #adadb8);
+  font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.tcx-settings-button:hover {
+  background: var(--color-background-alt-2, rgba(255, 255, 255, 0.1));
+  color: var(--color-text-base, #efeff1);
+}
+
+.tcx-settings-button:hover svg {
+  transform: rotate(35deg);
+}
+
+.tcx-settings-button svg {
+  transition: transform 220ms ease;
+}
+
+.tcx-settings-button[aria-expanded="true"] {
+  background: rgba(145, 71, 255, 0.2);
+  color: #bf94ff;
+}
+
+.tcx-settings-button:focus-visible {
+  outline: 2px solid var(--color-accent, #9147ff);
+  outline-offset: 1px;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Settings window (modal)                                                    */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * IMPORTANT: the panel is scoped to .tcx-xray-panel, NOT to .tcx-settings —
+ * "chat-settings" is a class Twitch itself uses in its own popover, and a
+ * matching class name made Twitch's stylesheet rules (and browser fallbacks)
+ * win over ours. Keeping a private scope means every control below is ours.
+ */
+
+.tcx-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.65);
+  font-family: "Roobert", "Inter", "Segoe UI", system-ui, -apple-system,
+    sans-serif;
+  /* No opacity animation: a settings window must be readable on frame one. */
+}
+
+.tcx-modal *,
+.tcx-modal *::before,
+.tcx-modal *::after {
+  box-sizing: border-box;
+}
+
+.tcx-modal__dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(680px, 100%);
+  max-height: min(88vh, 860px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: var(--color-background-body, #18181b);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  color: var(--color-text-base, #efeff1);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+/* Header ------------------------------------------------------------------ */
+
+.tcx-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  background: var(--color-background-alt, #1f1f23);
+}
+
+.tcx-modal__heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tcx-modal__icon {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #f7cf58, #ff5c5c);
+  box-shadow: 0 0 10px rgba(255, 142, 83, 0.6);
+}
+
+.tcx-modal__title {
+  margin: 0;
+  color: var(--color-text-base, #efeff1);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tcx-modal__tag {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: var(--color-text-alt, #adadb8);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.tcx-modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-alt, #adadb8);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.tcx-modal__close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-base, #efeff1);
+}
+
+.tcx-modal__close:focus-visible,
+.tcx-xray-panel button:focus-visible,
+.tcx-xray-panel select:focus-visible,
+.tcx-xray-panel input:focus-visible {
+  outline: 2px solid #a970ff;
+  outline-offset: 2px;
+}
+
+/* Body -------------------------------------------------------------------- */
+
+.tcx-modal__body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 20px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+/* A visible "more below" affordance: gradient strip pinned to the scrolling
+   edge. It only appears while rows are actually hidden below the fold. */
+.tcx-modal__scroller {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tcx-modal__scroller::before {
+  content: attr(data-more);
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 64px;
+  padding-bottom: 8px;
+  background: linear-gradient(
+    180deg,
+    rgba(24, 24, 27, 0) 0%,
+    rgba(24, 24, 27, 0.92) 42%,
+    #18181b 72%
+  );
+  color: #bf94ff;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.tcx-modal--scrollable .tcx-modal__scroller::before {
+  opacity: 1;
+}
+
+.tcx-modal__body::-webkit-scrollbar {
+  width: 10px;
+}
+
+.tcx-modal__body::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tcx-modal__body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  background-clip: padding-box;
+}
+
+.tcx-modal__body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.42);
+  background-clip: padding-box;
+}
+
+/* Sections ---------------------------------------------------------------- */
+
+.tcx-xray-panel {
+  color: var(--color-text-base, #efeff1);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.tcx-xray-panel__section {
+  margin: 18px 0 4px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--color-text-alt, #adadb8);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.tcx-xray-panel__section:first-child {
+  margin-top: 12px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* Rows -------------------------------------------------------------------- */
+
+.tcx-xray-panel__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 46px;
+  margin: 0;
+  padding: 8px 0;
+  color: var(--color-text-base, #efeff1);
+  cursor: pointer;
+}
+
+.tcx-xray-panel__row:not(.tcx-xray-panel__row--block):hover .tcx-xray-panel__label {
+  color: #bf94ff;
+}
+
+.tcx-xray-panel__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--color-text-base, #efeff1);
+  font-size: 15px;
+  line-height: 1.4;
+  transition: color 120ms ease;
+}
+
+.tcx-xray-panel__row--block {
+  display: block;
+  cursor: default;
+  padding-top: 10px;
+}
+
+.tcx-xray-panel__row--block:hover .tcx-xray-panel__label {
+  color: var(--color-text-base, #efeff1);
+}
+
+.tcx-xray-panel__slider-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.tcx-xray-panel__output {
+  flex: 0 0 auto;
+  min-width: 52px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--color-background-alt-2, #2f2f35);
+  color: var(--color-text-base, #efeff1);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.tcx-xray-panel__help {
+  margin: 2px 0 8px;
+  color: var(--color-text-alt, #adadb8);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* Switch (Twitch-style: pill + knob, purple when on) ---------------------- */
+
+.tcx-xray-panel input.tcx-toggle {
+  position: relative !important;
+  display: inline-block !important;
+  flex: 0 0 auto;
+  width: 40px !important;
+  height: 24px !important;
+  min-width: 40px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  outline: none;
+  background: #3a3a3d !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14) !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  opacity: 1 !important;
+  cursor: pointer;
+  transition: background 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.tcx-xray-panel input.tcx-toggle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  transition: transform 140ms ease-out;
+}
+
+.tcx-xray-panel input.tcx-toggle:checked {
+  background: #9147ff !important;
+  background: var(--color-accent, #9147ff) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+}
+
+.tcx-xray-panel input.tcx-toggle:checked::after {
+  transform: translateX(16px);
+}
+
+/* Slider (Twitch purple accent) ------------------------------------------ */
+
+/* Twitch-style slider: a thick rounded track with the filled part in purple.
+   The fill is painted with a hard-stop gradient driven by --tcx-range-pct,
+   which settings-panel.js keeps in sync with the current value. */
+.tcx-xray-panel input.tcx-range {
+  display: block !important;
+  width: 100% !important;
+  height: 28px !important;
+  margin: 4px 0 10px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  --tcx-range-pct: 16.7%;
+}
+
+.tcx-xray-panel input.tcx-range::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    #a970ff 0%,
+    #a970ff var(--tcx-range-pct),
+    #3a3a3d var(--tcx-range-pct),
+    #3a3a3d 100%
+  );
+}
+
+.tcx-xray-panel input.tcx-range::-webkit-slider-thumb {
+  width: 22px;
+  height: 22px;
+  margin-top: -7px;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  background: #a970ff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+  appearance: none;
+  -webkit-appearance: none;
+  transition: box-shadow 120ms ease;
+}
+
+.tcx-xray-panel input.tcx-range:hover::-webkit-slider-thumb {
+  box-shadow: 0 0 0 5px rgba(169, 112, 255, 0.28);
+}
+
+.tcx-xray-panel input.tcx-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 5px rgba(169, 112, 255, 0.4);
+}
+
+/* Select ------------------------------------------------------------------ */
+
+.tcx-xray-panel select.tcx-select {
+  flex: 0 0 auto;
+  max-width: 240px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: var(--color-background-alt-2, #26262c);
+  color: var(--color-text-base, #efeff1);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.tcx-xray-panel select.tcx-select:hover {
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+.tcx-xray-panel select.tcx-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Audit log --------------------------------------------------------------- */
+
+.tcx-xray-panel .tcx-audit-section {
+  margin: 8px 0 4px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tcx-xray-panel .tcx-audit-section[hidden] {
+  display: none !important;
+}
+
+.tcx-xray-panel .tcx-audit-count-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--color-text-alt, #adadb8);
+  font-size: 13px;
+}
+
+.tcx-xray-panel .tcx-audit-count-row b {
+  color: var(--color-text-base, #efeff1);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tcx-xray-panel .tcx-audit-btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tcx-xray-panel .tcx-audit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-base, #efeff1);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.tcx-xray-panel .tcx-audit-btn:hover {
+  border-color: #a970ff;
+  background: rgba(169, 112, 255, 0.16);
+}
+
+.tcx-xray-panel .tcx-audit-btn--danger:hover {
+  border-color: #ff5656;
+  background: rgba(255, 86, 86, 0.14);
+  color: #ff8a8a;
+}
+
+/* Footer ------------------------------------------------------------------ */
+
+.tcx-modal__footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  background: var(--color-background-alt, #1f1f23);
+}
+
+.tcx-modal__hint {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--color-text-alt, #adadb8);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.tcx-modal__reset {
+  flex: 0 0 auto;
+  padding: 9px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-base, #efeff1);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.tcx-modal__reset:hover {
+  border-color: #a970ff;
+  background: rgba(169, 112, 255, 0.14);
+}
+/* ------------------------------------------------------------------------- */
+/* Tippy tooltip theme                                                        */
+/* ------------------------------------------------------------------------- */
+
+.tippy-box[data-theme~="twitch"] {
+  border: 1px solid var(--color-border-base, rgba(255, 255, 255, 0.14));
+  border-radius: 8px;
+  background: var(--color-background-alt, #1f1f23);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+  color: var(--color-text-base, #efeff1);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.tippy-box[data-theme~="twitch"] > .tippy-arrow {
+  color: var(--color-background-alt, #1f1f23);
+}
+
+.tippy-box[data-theme~="twitch"] > .tippy-content {
+  padding: 0;
+}
+
+.tcx-tip {
+  min-width: 228px;
+  max-width: 340px;
+  padding: 11px 12px 10px;
+  color: var(--color-text-base, #efeff1);
+  font-family: inherit;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.tcx-tip__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tcx-tip__dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: hsl(var(--tcx-tip-hue, 52), 90%, 58%);
+  box-shadow: 0 0 8px hsla(var(--tcx-tip-hue, 52), 90%, 58%, 0.5);
+}
+
+.tcx-tip__head-copy {
+  min-width: 0;
+}
+
+.tcx-tip__title {
+  color: var(--color-text-base, #efeff1);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+}
+
+.tcx-tip__subtitle {
+  margin-top: 2px;
+  color: var(--color-text-alt, #adadb8);
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+
+.tcx-tip__meter {
+  height: 4px;
+  margin-bottom: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-background-alt-2, #2f2f35);
+}
+
+.tcx-tip__meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    hsl(var(--tcx-tip-hue, 52), 95%, 63%),
+    hsl(var(--tcx-tip-hue, 52), 88%, 50%)
+  );
+}
+
+.tcx-tip__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tcx-tip__row,
+.tcx-tip__trigger {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--color-border-base, rgba(255, 255, 255, 0.06));
+}
+
+.tcx-tip__row:last-child,
+.tcx-tip__trigger:last-child {
+  border-bottom: 0;
+}
+
+.tcx-tip__label,
+.tcx-tip__trigger-label {
+  color: var(--color-text-alt, #adadb8);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.tcx-tip__value {
+  color: var(--color-text-base, #efeff1);
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tcx-tip__value--alert,
+.tcx-tip__note--alert {
+  color: #ff8a8a;
+}
+
+.tcx-tip__note--alert {
+  border-left-color: #ff5c5c;
+  background: rgba(255, 92, 92, 0.12);
+}
+
+.tcx-tip__value--loading {
+  color: #c4b5fd;
+  font-weight: 600;
+}
+
+.tcx-tip__trigger--alert .tcx-tip__trigger-label {
+  color: #ff8a8a;
+  font-weight: 700;
+}
+
+.tcx-tip__value--muted {
+  color: var(--color-text-alt, #adadb8);
+  font-weight: 500;
+}
+
+.tcx-tip__points {
+  flex: 0 0 auto;
+  min-width: 28px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: hsla(var(--tcx-tip-hue, 52), 90%, 58%, 0.12);
+  color: hsl(var(--tcx-tip-hue, 52), 92%, 70%);
+  font-size: 9.5px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.tcx-tip__empty {
+  padding: 7px 0;
+  color: var(--color-text-alt, #adadb8);
+  font-size: 10.5px;
+  font-style: italic;
+}
+
+.tcx-tip__note {
+  margin-top: 7px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--color-accent, #9147ff);
+  border-radius: 0 4px 4px 0;
+  background: rgba(145, 71, 255, 0.1);
+  color: var(--color-text-alt, #adadb8);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.tcx-tip__verdict {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.tcx-tip__verdict--ok {
+  background: rgba(0, 199, 126, 0.12);
+  color: #6ee7b7;
+}
+
+.tcx-tip__verdict--info {
+  background: rgba(145, 71, 255, 0.14);
+  color: #c4b5fd;
+}
+
+.tcx-tip__verdict--warn,
+.tcx-tip__verdict--critical {
+  background: rgba(255, 117, 88, 0.14);
+  color: #ffa38f;
+}
+
+.tcx-tip__verdict--critical {
+  border: 1px solid rgba(255, 117, 88, 0.5);
+}
+
+.tcx-tip__verdict--unknown {
+  background: rgba(173, 173, 184, 0.12);
+  color: var(--color-text-alt, #adadb8);
+}
+
+.tcx-tip__foot {
+  margin-top: 9px;
+  padding-top: 7px;
+  border-top: 1px solid var(--color-border-base, rgba(255, 255, 255, 0.08));
+  color: var(--color-text-alt, #adadb8);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.tcx-tip__hero {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 1px 0 7px;
+}
+
+.tcx-tip__hero-value {
+  color: var(--color-text-base, #efeff1);
+  font-size: 24px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.tcx-tip__hero-value--range {
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.tcx-tip__hero-caption {
+  color: var(--color-text-alt, #adadb8);
+  font-size: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tcx-bot-badge,
+  .tcx-real-viewers,
+  .chat-line__message.tcx-muted,
+  .tcx-xray-panel input.tcx-toggle,
+  .tcx-xray-panel input.tcx-toggle::after,
+  .tcx-settings-button,
+  .tcx-settings-button svg,
+  .tcx-audit-btn {
+    transition: none;
+  }
+
+  .tcx-real-viewers--wave,
+  .tcx-stats[data-wave="1"] .tcx-stats__wave,
+  .tcx-real-viewers__word::after,
+  .tcx-stats__loading-word::after {
+    animation: none;
+  }
+
+  /* Reduced motion: show a static "…" instead of cycling dots. */
+  .tcx-real-viewers__word::after,
+  .tcx-stats__loading-word::after {
+    content: "…";
+  }
+
+}

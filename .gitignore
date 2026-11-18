@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output (regenerate with `npm run build:all`)
+dist/
+release/
+
+# Test output
+coverage/
+test-results/
+playwright-report/
+.pw-browsers/
+blob-report/
+.vitest/
+
+# Local tooling caches
+.npm-cache/
+.tmp-chrome*/
+.ff-profile/
+
+# Raw capture dumps contain public nicknames - never commit them
+*.jsonl
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log

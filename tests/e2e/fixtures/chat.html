@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>Chat X-Ray E2E fixture</title>
+    <style>
+      body { background: #18181b; color: #efeff1; font-family: system-ui; margin: 0; }
+      .stream-chat { width: 420px; margin: 20px; display: flex; flex-direction: column; }
+      .stream-chat-header { display: flex; align-items: center; gap: 8px; padding: 8px; }
+      .chat-scrollable-area__message-container { height: 320px; overflow-y: auto; }
+      .chat-line__message { padding: 4px 8px; font-size: 13px; }
+      .chat-author__display-name { font-weight: 700; margin-right: 4px; }
+      .live-channel-metadata-bar { padding: 4px 8px; }
+    </style>
+  </head>
+  <body>
+    <!-- Structurally faithful Twitch chat shell: these are the selectors
+         content.js, message-binder.js and viewer-counter.js look for. -->
+    <div class="live-channel-metadata-bar">
+      <span data-a-target="animated-channel-viewers-count">73,069</span>
+    </div>
+
+    <div class="stream-chat">
+      <div class="stream-chat-header"><span>STREAM CHAT</span></div>
+      <div
+        class="chat-scrollable-area__message-container"
+        data-test-selector="chat-scrollable-area__message-container"
+      ></div>
+    </div>
+
+    <script>
+      // The fixture must NOT replace window.WebSocket: the extension patches it
+      // in the MAIN world at document_start, and clobbering it would hide the
+      // exact behaviour under test. Instead a socket instance is created and
+      // handed to a test through __fixture.
+      //
+      // document_start runs before this script, so window.WebSocket is already
+      // the extension's Proxy here.
+      window.__fixture = {
+        createChatSocket() {
+          // Throws offline (no DNS), which is fine: the Proxy constructs the
+          // real socket synchronously and attaches its message tap before the
+          // connection fails.
+          try {
+            return new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+          } catch (error) {
+            return null;
+          }
+        },
+        deliver(socket, ircLine) {
+          if (!socket) return false;
+          socket.dispatchEvent(new MessageEvent('message', { data: ircLine }));
+          return true;
+        },
+        appendRow(login, text) {
+          var container = document.querySelector(
+            '.chat-scrollable-area__message-container'
+          );
+          var row = document.createElement('div');
+          row.className = 'chat-line__message';
+          row.setAttribute('data-a-user', login);
+          var name = document.createElement('span');
+          name.className = 'chat-author__display-name';
+          name.textContent = login;
+          var body = document.createElement('span');
+          body.className = 'chat-line__message-body';
+          body.textContent = text;
+          row.appendChild(name);
+          row.appendChild(body);
+          container.appendChild(row);
+          return true;
+        },
+      };
+    </script>
+  </body>
+</html>

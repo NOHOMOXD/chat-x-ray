@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title data-i18n="options.title">Twitch Chat X-Ray — settings</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="opt-page">
+      <header class="opt-hero">
+        <img class="opt-hero__icon" src="icons/icon128.png" alt="" width="64" height="64" />
+        <div>
+          <p class="opt-hero__eyebrow" data-i18n="options.eyebrow">LOCAL · NO NETWORK</p>
+          <h1>Twitch Chat X-Ray</h1>
+          <p class="opt-hero__lead" data-i18n="options.lead">
+            A local chat X-ray: bot badges, client-side R9K, audit log and a
+            live-viewer estimate. Everything is computed inside the tab.
+          </p>
+        </div>
+      </header>
+
+      <section class="opt-card" aria-labelledby="settings-title">
+        <div class="opt-card__head">
+          <h2 id="settings-title" data-i18n="options.heading">Settings</h2>
+          <span class="opt-save" id="save-state" role="status" aria-live="polite"></span>
+        </div>
+
+        <div class="tcx-settings opt-settings">
+          <div class="tcx-settings__section" data-i18n="settings.section.filters">Badges &amp; filtering</div>
+
+          <label class="tcx-settings__row">
+            <span class="tcx-settings__label" data-i18n="settings.showBadges">Show [BOT %] badges</span>
+            <input
+              class="tcx-toggle"
+              type="checkbox"
+              data-opt-setting="showBadges"
+            />
+          </label>
+
+          <label class="tcx-settings__row">
+            <span class="tcx-settings__label" data-i18n="settings.mute">Mute suspicious accounts</span>
+            <input
+              class="tcx-toggle"
+              type="checkbox"
+              data-opt-setting="muteSuspicious"
+            />
+          </label>
+
+          <label class="tcx-settings__row">
+            <span class="tcx-settings__label" data-i18n="settings.hide">Hide suspicious accounts</span>
+            <input
+              class="tcx-toggle"
+              type="checkbox"
+              data-opt-setting="hideSuspicious"
+            />
+          </label>
+
+          <div class="tcx-settings__row tcx-settings__row--slider">
+            <div class="tcx-settings__slider-head">
+              <span class="tcx-settings__label" data-i18n="options.thresholdLabel">Action threshold (10% – 100%)</span>
+              <output class="tcx-settings__output" id="threshold-output">25%</output>
+            </div>
+            <input
+              class="tcx-range"
+              type="range"
+              min="10"
+              max="100"
+              step="5"
+              data-opt-setting="suspiciousThreshold"
+              data-i18n="settings.thresholdAria"
+              data-i18n-attr="aria-label"
+            />
+            <p class="opt-help" data-i18n="settings.thresholdHelp"></p>
+          </div>
+
+          <div class="tcx-settings__section" data-i18n="settings.section.chat">Chat</div>
+
+          <label class="tcx-settings__row">
+            <span class="tcx-settings__label" data-i18n="settings.showChatStats">Show the stats strip above chat</span>
+            <input
+              class="tcx-toggle"
+              type="checkbox"
+              data-opt-setting="showChatStats"
+            />
+          </label>
+          <p class="opt-help" data-i18n="settings.showChatStatsHelp"></p>
+
+          <div class="tcx-settings__section" data-i18n="settings.section.r9k">R9K</div>
+
+          <label class="tcx-settings__row">
+            <span class="tcx-settings__label" data-i18n="settings.r9k">Client-side R9K (pastes &amp; duplicates)</span>
+            <input
+              class="tcx-toggle"
+              type="checkbox"
+              data-opt-setting="clientR9K"
+            />
+          </label>
+
+          <label class="tcx-settings__row">
+            <span class="tcx-settings__label" data-i18n="settings.r9kAction">R9K action</span>
+            <select class="tcx-select" data-opt-setting="r9kAction" data-i18n="settings.r9kActionAria" data-i18n-attr="aria-label">
+              <option value="mute" data-i18n="settings.r9kMute">Mute</option>
+              <option value="hide" data-i18n="settings.r9kHide">Hide</option>
+            </select>
+          </label>
+
+          <div class="tcx-settings__section" data-i18n="settings.section.data">Data</div>
+
+          <label class="tcx-settings__row">
+            <span class="tcx-settings__label" data-i18n="settings.adjustViewer">Adjust Twitch viewer count (≈live)</span>
+            <input
+              class="tcx-toggle"
+              type="checkbox"
+              data-opt-setting="adjustViewerCounter"
+            />
+          </label>
+
+          <label class="tcx-settings__row">
+            <span class="tcx-settings__label" data-i18n="settings.audit">Keep a JSON bot log</span>
+            <input
+              class="tcx-toggle"
+              type="checkbox"
+              data-opt-setting="enableAuditLog"
+            />
+          </label>
+          <p class="opt-help" data-i18n="options.auditHelp"></p>
+
+          <label class="tcx-settings__row">
+            <span class="tcx-settings__label" data-i18n="settings.accountAge">Look up account age via Twitch GQL (unofficial)</span>
+            <input
+              class="tcx-toggle"
+              type="checkbox"
+              data-opt-setting="accountAgeLookup"
+            />
+          </label>
+          <p class="opt-help" data-i18n="options.accountAgeHelp"></p>
+
+          <div class="tcx-settings__section" data-i18n="settings.section.interface">Interface</div>
+
+          <label class="tcx-settings__row">
+            <span class="tcx-settings__label" data-i18n="settings.language">Language</span>
+            <select class="tcx-select" data-opt-setting="language" data-i18n="settings.language" data-i18n-attr="aria-label">
+              <option value="" data-i18n="settings.languageAuto">Auto (browser)</option>
+              <option value="ru" data-i18n="settings.languageRu">Русский</option>
+              <option value="en" data-i18n="settings.languageEn">English</option>
+            </select>
+          </label>
+
+          <p class="tcx-settings__hint" data-i18n="options.hint">
+            Analysis lives in the tab; network only with GQL age lookup.
+          </p>
+        </div>
+
+        <div class="opt-actions">
+          <button class="opt-button opt-button--ghost" id="reset-settings" type="button" data-i18n="app.reset">
+            Reset settings
+          </button>
+        </div>
+      </section>
+
+      <section class="opt-grid" aria-label="How the analysis works">
+        <article class="opt-info">
+          <h2 data-i18n="options.cardR9k.title">Adaptive R9K</h2>
+          <p data-i18n="options.cardR9k.body"></p>
+        </article>
+
+        <article class="opt-info">
+          <h2 data-i18n="options.cardScore.title">Bot score (100% matrix)</h2>
+          <p data-i18n="options.cardScore.body"></p>
+        </article>
+
+        <article class="opt-info">
+          <h2 data-i18n="options.cardViewers.title">Real viewers</h2>
+          <p data-i18n="options.cardViewers.body"></p>
+        </article>
+      </section>
+
+      <footer class="opt-footer">
+        <span data-i18n="options.footerLib">Twitch Chat X-Ray · Manifest V3 · ES Modules</span>
+        <span data-i18n="options.footerPrivacy">Passive IRC capture · GQL age lookup is opt-in</span>
+      </footer>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>
