@@ -61,6 +61,7 @@ import { parseFrame } from './irc-parser.js';
     // Non-fatal
   }
   const wrappedSockets = new WeakSet();
+  let socketSequence = 0;
 
   function postMessages(messages, socketUrl) {
     if (!messages || messages.length === 0) {
@@ -155,7 +156,13 @@ import { parseFrame } from './irc-parser.js';
     }
     wrappedSockets.add(socket);
 
+    const socketId = ++socketSequence;
     try {
+      for (const kind of ['open', 'close']) {
+        socket.addEventListener(kind, () => {
+          postMessages([{ kind: 'socket-' + kind, socketId }], socketUrl);
+        });
+      }
       socket.addEventListener('message', (event) => {
         consumeData(event.data, socketUrl);
       });

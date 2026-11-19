@@ -14,7 +14,7 @@
  */
 import { callStorage, getStorageArea } from '../platform/browser-api.js';
 
-export const ER_BASELINE_KEY = 'tcx:erBaseline:v1';
+export const ER_BASELINE_KEY = 'tcx:erBaseline:v2';
 
 export const ER_BASELINE_DEFAULTS = Object.freeze({
   maxSessions: 5,

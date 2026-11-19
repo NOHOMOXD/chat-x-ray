@@ -19,18 +19,28 @@
  * канале"). Keep captures public, short, and do not commit them.
  */
 import fs from 'node:fs';
-import { parsePrivmsg } from '../src/irc-parser.js';
-import { Analyzer } from '../src/analyzer.js';
-import { ViewerHistory } from '../src/viewer-history.js';
-import { buildViewerModel } from '../src/viewer-estimate.js';
-import { formatNumber } from '../src/ui-utils.js';
+import { parseFrame } from '../src/platform/irc-parser.js';
+import { Analyzer } from '../src/core/analyzer.js';
+import { ViewerHistory } from '../src/analysis/viewer-history.js';
+import { buildViewerModel, estimateViewerRange } from '../src/analysis/viewer-estimate.js';
+import { formatNumber } from '../src/ui/shared/ui-utils.js';
+
+import { compareIdGroupScores, summarizeRecords } from '../src/analysis/session-capture.js';
+import { describeGroups, findIdGroups, recordsAt, summarizeMatches } from '../src/core/id-group-diagnostics.js';
+import { DEFAULTS as SETTINGS } from '../src/config/settings.js';
 
 function parseArgs(argv) {
   const args = { chat: '', viewers: '', json: '' };
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
     const value = argv[i + 1];
-    if (key === '--chat') {
+    if (key === '--snapshot') {
+      args.snapshot = value;
+      i += 1;
+    } else if (key === '--reference') {
+      args.reference = value;
+      i += 1;
+    } else if (key === '--chat') {
       args.chat = value || '';
       i += 1;
     } else if (key === '--viewers') {
@@ -72,11 +82,163 @@ function formatTime(ts) {
   return new Date(ts).toISOString().slice(11, 19);
 }
 
+function compareRanges(model, stats) {
+  if (!model) {
+    return null;
+  }
+  return {
+    displayed: model.range,
+    withoutShortWindowScale: estimateViewerRange(model.stableOfficial, {
+      ...stats, sessionMs: 600000,
+    }),
+    withSixToTwelvePercent: estimateViewerRange(model.stableOfficial, stats, {
+      viewersPerChatterLow: 100 / 12,
+      viewersPerChatterHigh: 100 / 6,
+    }),
+  };
+}
+
+function compareEvents(events, reference, samples) {
+  return events.filter((event) => ['surge', 'churn', 'viewer-outflow'].includes(event.kind)).map((event) => {
+    const closest = (rows, ts) => rows.reduce((best, row) =>
+      !best || Math.abs(row.ts - ts) < Math.abs(best.ts - ts) ? row : best, null);
+    const endTs = event.kind === 'surge' ? event.ts : event.lowTs;
+    const startTs = event.fromTs ?? event.ts - event.durationMs;
+    return {
+      ...event,
+      nearestViewerSample: closest(samples, endTs),
+      referenceFrom: closest(reference, startTs),
+      referenceTo: closest(reference, endTs),
+    };
+  });
+}
+
+function replayViewerOutflows(snapshot, now) {
+  const history = new ViewerHistory();
+  const outflows = [];
+  const timeline = [
+    ...snapshot.viewerSamples,
+    ...snapshot.events.filter(({ kind }) => kind === 'viewer-gap'),
+  ].sort((a, b) => a.ts - b.ts);
+  for (const entry of timeline) {
+    if (entry.kind === 'viewer-gap') {
+      history.interrupt(entry.ts);
+    } else {
+      const accepted = history.record(entry.value, entry.ts, { cleanUsers: entry.clean });
+      if (accepted?.outflow) outflows.push(accepted.outflow);
+    }
+  }
+  const stats = history.getStats(now);
+  return { count: stats.totalOutflows, outflows };
+}
+
+function replayWave(event, current, exportedAt) {
+  if (event.atTrigger) return event;
+  const context = recordsAt(current.messages, event.ts);
+  const subjects = context.filter((record) => record.waveBoost && record.bucketStart === event.bucketStart);
+  const members = new Set(subjects.map((record) => record.userKey));
+  return {
+    ...event,
+    atTrigger: {
+      ts: event.ts,
+      completeWindow: exportedAt - current.durationMs <= event.ts - 600000,
+      groups: describeGroups(findIdGroups(context), context),
+      ...summarizeMatches(subjects, context, members),
+    },
+  };
+}
+
+function analyzeSnapshot(args) {
+  const snapshot = JSON.parse(fs.readFileSync(args.snapshot, 'utf8'));
+  let report;
+  if (Array.isArray(snapshot)) {
+    const triggers = new Map();
+    for (const entry of snapshot) {
+      for (const key of entry.triggerKeys || []) {
+        triggers.set(key, (triggers.get(key) || 0) + 1);
+      }
+    }
+    report = { kind: 'selected-audit', entries: snapshot.length, triggers: Object.fromEntries(triggers) };
+  } else {
+    if (snapshot.schemaVersion !== 1) {
+      throw new Error('Unknown session snapshot format');
+    }
+    const { current, minutes, events } = snapshot;
+    const settings = snapshot.settings.at(-1)?.value || SETTINGS;
+    const now = Date.parse(snapshot.exportedAt);
+    const model = current.model?.input ? buildViewerModel(current.model.input) : current.model;
+    const reportMinutes = minutes.map((row) => ({
+      ts: row.ts, coverageMs: row.stats.sessionMs, minute: row.minute,
+      official: row.model?.official, diagnostics: row.diagnostics,
+      idGroupAudit: row.idGroupAudit ?? null,
+      ranges: compareRanges(row.model, row.stats),
+    }));
+    const firstFull = reportMinutes.find((row) => row.coverageMs >= 600000);
+    const early = [1, 2, 5].map((minute) => {
+      const observed = reportMinutes.find((row) =>
+        row.coverageMs >= minute * 60000 && row.coverageMs < (minute + 1) * 60000);
+      return { minute, displayed: observed?.ranges?.displayed ?? null };
+    });
+    report = {
+      kind: 'session-snapshot',
+      channel: snapshot.channel,
+      current: {
+        model,
+        matchingDisplayedRange: JSON.stringify(model?.range) === JSON.stringify(current.model?.range),
+        ranges: compareRanges(model, current.stats),
+        diagnostics: summarizeRecords(current.messages, settings, {
+          official: model?.official, stableOfficial: model?.stableOfficial, stats: current.stats,
+        }),
+        idGroupAudit: current.idGroupAudit ??
+          compareIdGroupScores(current.messages, now, settings, model, current.stats),
+        swarm: findBursts(current.messages),
+      },
+      warmup: { early, full: firstFull?.ranges?.displayed ?? null },
+      minutes: reportMinutes,
+      viewerOutflows: replayViewerOutflows(snapshot, now),
+      chatWaves: events.filter(({ kind }) => kind === 'chat-wave')
+        .map((event) => replayWave(event, current, now)),
+      events: compareEvents(events, readJsonl(args.reference), snapshot.viewerSamples),
+      exportedAt: now,
+    };
+  }
+  const json = JSON.stringify(report, null, 2) + '\n';
+  if (args.json) {
+    fs.writeFileSync(args.json, json);
+  } else {
+    process.stdout.write(json);
+  }
+}
+
+function findBursts(messages) {
+  const ordered = messages.filter((message) =>
+    message.serverTimestamp && !message.roleExempt && message.userId)
+    .sort((a, b) => a.ts - b.ts);
+  const bursts = [];
+  let end = 0;
+  for (let start = 0; start < ordered.length; start += 1) {
+    const ts = ordered[start].ts;
+    while (end < ordered.length && ordered[end].ts - ts <= 100) end += 1;
+    const window = ordered.slice(start, end);
+    const authors = new Set(window.map((message) => message.userId));
+    const texts = new Set(window.map((message) => message.text.trim().toLowerCase()));
+    if (authors.size >= 8 && texts.size > 1) {
+      bursts.push({ ts, authors: authors.size });
+      start = end - 1;
+    }
+  }
+  return bursts;
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.snapshot) {
+    analyzeSnapshot(args);
+    return;
+  }
   if (!args.chat) {
     console.error(
-      'Usage: node tools/analyze-capture.mjs --chat <chat.jsonl> [--viewers <viewers.jsonl>] [--json <out.json>]'
+      'Usage: node tools/analyze-capture.mjs (--snapshot <session.json> [--reference <viewers.jsonl>] | --chat <chat.jsonl> [--viewers <viewers.jsonl>]) [--json <out.json>]'
     );
     process.exit(1);
   }
@@ -89,18 +251,16 @@ function main() {
   const seenMessageIds = new Set();
   for (let i = 0; i < chatRows.length; i += 1) {
     const row = chatRows[i];
-    const message = parsePrivmsg(row.line, row.ts);
-    if (!message) {
-      continue;
-    }
-    // Two overlapping captures can contain the same IRC message id.
-    if (message.id) {
-      if (seenMessageIds.has(message.id)) {
+    if (!Number.isFinite(row.ts)) continue;
+    for (const message of parseFrame(row.line, row.ts)) {
+      if (message.id && seenMessageIds.has(message.id)) {
         continue;
       }
-      seenMessageIds.add(message.id);
+      if (message.id) {
+        seenMessageIds.add(message.id);
+      }
+      messages.push({ ts: row.ts, message });
     }
-    messages.push({ ts: Number(row.ts), message });
   }
   messages.sort((a, b) => a.ts - b.ts);
 
@@ -142,6 +302,10 @@ function main() {
     const event = events[i];
 
     if (event.kind === 'message') {
+      if (event.message.kind === 'raid') {
+        history.recordRaid(event.message);
+        continue;
+      }
       const result = analyzer.ingest(event.message, event.ts);
       if (!result.record) {
         continue;
@@ -170,8 +334,12 @@ function main() {
     }
 
     lastViewer = event.viewers;
-    history.record(event.viewers, event.ts);
     const stats = analyzer.getStats(event.ts);
+    history.record(event.viewers, event.ts, {
+      cleanUsers: stats.cleanUsers,
+      countMessages: (from, to) => from < messages[0].ts ? null :
+        analyzer.session.records.filter((record) => record.ts > from && record.ts <= to).length,
+    });
     model = buildViewerModel({
       official: event.viewers,
       stats,
@@ -268,7 +436,7 @@ function main() {
     console.log(`  Clean users (10m)  : ${stats.cleanUsers} / ${stats.activeUsers}`);
     console.log(`  Suspicious in chat : ${stats.suspiciousUsers}`);
     console.log(`  Session            : ${stats.observedMinutes} min`);
-    console.log(`  Verdict            : ${finalModel.verdict.label}`);
+    console.log(`  Verdict            : ${finalModel.verdict.key}`);
     const finalBotRatio = stats.activeUsers
       ? stats.suspiciousUsers / stats.activeUsers
       : 0;

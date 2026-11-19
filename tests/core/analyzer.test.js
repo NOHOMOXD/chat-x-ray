@@ -67,6 +67,34 @@ describe('helpers', () => {
   });
 });
 
+describe('confirmed account age', () => {
+  it.each([89, 90, 400])('keeps profile and behaviour points for age %i, cached or fetched later', (days) => {
+    for (const cached of [true, false]) {
+      const analyzer = new Analyzer();
+      const msg = message({ badges: [], color: '', login: 'viewer12345', text: 'free nitro for everyone' });
+      if (cached) analyzer.applyAccountAge(msg.login, days);
+      const record = analyzer.ingest(msg, msg.ts).record;
+      const expected = score({ ...msg }).botScore + (days < 90 ? 10 : 0);
+      expect(expected).toBeGreaterThanOrEqual(30);
+      analyzer.applyAccountAge(msg.login, days);
+      expect(record.accountAgeDays).toBe(days);
+      expect(record.botScore).toBe(expected);
+      expect(record.triggers.some(({ points }) => points < 0)).toBe(false);
+    }
+  });
+
+  it('leaves a large ID unscored for age until a date is confirmed', () => {
+    const analyzer = new Analyzer();
+    const msg = message({ badges: [], color: '', login: 'viewer', userId: '1600000000' });
+    const record = analyzer.ingest(msg, msg.ts).record;
+    expect(record.botScore).toBe(25);
+    expect(record.accountAgeDays).toBeNull();
+    analyzer.applyAccountAge(msg.login, 400);
+    expect(record.botScore).toBe(25);
+    expect(record.freshAccount).toBe(false);
+  });
+});
+
 describe('scoring', () => {
   it('gives a healthy chatter a low score', () => {
     const record = score({});
@@ -74,10 +102,12 @@ describe('scoring', () => {
     expect(record.triggers).toEqual([]);
   });
 
-  it('no badges + default colour = exactly the 25% default threshold', () => {
+  it('no badges + default colour alone stays under the 30% default threshold', () => {
     const record = score({ badges: [], color: '' });
+    // An ordinary viewer who simply never picked a badge or a colour must not
+    // trip the default threshold on his own.
     expect(record.botScore).toBe(25);
-    expect(record.botScore).toBe(DEFAULTS.suspiciousThreshold);
+    expect(record.botScore).toBeLessThan(DEFAULTS.suspiciousThreshold);
     expect(record.triggers.map((t) => t.key)).toEqual([
       'no-badges',
       'default-color',
@@ -151,15 +181,15 @@ describe('scoring', () => {
     expect(record.triggers.some((t) => t.key === 'id-cluster')).toBe(false);
   });
 
-  it('flags a fresh empty account by user id', () => {
+  it('does not infer age from the numeric user id', () => {
     const record = score({
       userId: '1500000000',
       login: 'freshone',
       badges: [],
       color: '',
     });
-    expect(record.freshAccount).toBe(true);
-    expect(record.triggers.some((t) => t.key === 'fresh-account')).toBe(true);
+    expect(record.freshAccount).toBe(false);
+    expect(record.triggers.some((t) => t.key === 'fresh-account')).toBe(false);
   });
 
   it('adds a hard bonus for scam content', () => {
@@ -244,7 +274,7 @@ describe('deduplication', () => {
 describe('reset', () => {
   it('clears all session state', () => {
     const analyzer = new Analyzer();
-    analyzer.ingest(message({}), 1_000_000);
+    analyzer.ingest(message({ ts: 1_000_000 }), 1_000_000);
     expect(analyzer.getStats(1_001_000).windowMessages).toBe(1);
     analyzer.reset();
     expect(analyzer.getStats(1_001_000).windowMessages).toBe(0);
@@ -265,4 +295,34 @@ describe('getStats', () => {
     expect(stats.isBotWave).toBe(false);
     expect(stats.windowSize).toBe(1);
   });
+});
+
+it('counts known service bots in chat traffic and excludes them from audience inputs', () => {
+  const analyzer = new Analyzer();
+  const time = 2_000_000;
+  for (const login of ['nightbot', 'moobot', 'nightbot', 'moobot', 'nightbot']) {
+    analyzer.ingest(message({ login, userId: login === 'nightbot' ? '42' : '43', ts: time }), time);
+  }
+  expect(analyzer.getStats(time)).toMatchObject({
+    windowMessages: 5, audienceMessages: 0, activeUsers: 2, cleanUsers: 0, serviceBots: 2,
+  });
+});
+
+it('counts boosted messages and unique authors, with 30 seconds of indication from detection', () => {
+  const analyzer = new Analyzer();
+  const time = 2_019_000;
+  analyzer.waves._isWaveAt = () => true;
+  const first = analyzer.ingest(message({ ts: time, badges: [], userId: '42' }), time);
+  const second = analyzer.ingest(message({ ts: time + 1, badges: [], userId: '42' }), time + 1);
+  expect(first.waveTriggered).toBe(true);
+  expect(second.waveTriggered).toBe(false);
+  expect(first.waveEvent).toMatchObject({ kind: 'chat-wave', ts: time, messages: 2, authors: 1 });
+  expect(analyzer.getStats(time + 29_999)).toMatchObject({
+    isBotWave: false, waveAlert: true, waveCount: 1,
+  });
+  expect(analyzer.getStats(time + 30_000)).toMatchObject({
+    waveAlert: false, waveCount: 1, lastWave: { messages: 2, authors: 1 },
+  });
+  analyzer.reset();
+  expect(analyzer.getStats(time + 30_000)).toMatchObject({ waveCount: 0, lastWave: null });
 });

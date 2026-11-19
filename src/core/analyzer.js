@@ -1,3 +1,4 @@
+import { ID_GROUP_RULE, describeGroups, findIdGroups, recordsAt, summarizeMatches } from './id-group-diagnostics.js';
 /*
  * Twitch Chat X-Ray — message analyzer.
  * Composes TextAnalysis, ChatSession, BotWaveTracker and BotLogger.
@@ -71,7 +72,7 @@ export const DEFAULTS = Object.freeze({
   bucketCount: 30,
   waveZ: 3.0,
   badgedWaveZ: 1.5,
-  suspiciousThreshold: 25,
+  suspiciousThreshold: 30,
   selfHistorySize: 5,
   selfJaccardThreshold: 0.65,
   maxUsers: 20000,
@@ -80,8 +81,7 @@ export const DEFAULTS = Object.freeze({
   minWaveHistoryBuckets: 6,
   minWaveHistoryMessages: 0,
   idClusterRadius: 50000,
-  freshUserIdThreshold: 1450000000,
-  freshAccountAgeDays: 30,
+  freshAccountAgeDays: 90,
   enableAuditLog: false,
 });
 
@@ -161,6 +161,10 @@ export class Analyzer {
       ttlMs: this.options.recentWindowMs,
     });
 
+    this.waveCount = 0;
+    this.lastWave = null;
+    this.idGroupSnapshot = null;
+    this.idGroupsById = new Map();
     this.waves = new BotWaveTracker({
       bucketMs: this.options.bucketMs,
       bucketCount: this.options.bucketCount,
@@ -181,6 +185,10 @@ export class Analyzer {
     this.session.reset();
     this.cluster.reset();
     this.waves.reset();
+    this.waveCount = 0;
+    this.lastWave = null;
+    this.idGroupSnapshot = null;
+    this.idGroupsById = new Map();
     this.logger.clear();
   }
 
@@ -319,14 +327,14 @@ export class Analyzer {
     const wantFresh = ageDays < this.options.freshAccountAgeDays;
     let changed = previous !== ageDays;
 
-    for (let i = 0; i < this.window.length; i += 1) {
-      const record = this.window[i];
+    for (const record of this.session.records) {
       if (record.login !== key) {
         continue;
       }
 
       record.accountAgeDays = ageDays;
       record.accountAgeSource = 'api';
+
       if (record.roleExempt || record.serviceBot) {
         continue;
       }
@@ -362,7 +370,8 @@ export class Analyzer {
       } else if (!wantFresh && trigger) {
         record.freshAccount = false;
         record.botScore = clamp(
-          record.botScore - WEIGHTS.freshAccount,
+          record.triggers.reduce((total, entry) => total +
+            (entry === trigger ? 0 : entry.points), 0),
           0,
           100
         );
@@ -469,21 +478,10 @@ export class Analyzer {
     const clusterPeers = unbadged
       ? this.cluster.countPeers(numericUserId, this.options.idClusterRadius)
       : 0;
-    // Twitch user ids are assigned monotonically. Anything above 1.45B was
-    // registered recently; combined with an empty profile it is a farm tell.
-    // When the optional GQL lookup is enabled, the exact account age overrides
-    // this heuristic (and can also reveal a fresh account below the id cutoff).
     const apiAgeDays = this.accountAges.get(login);
     const hasApiAge = Number.isFinite(apiAgeDays);
-    const freshById =
-      unbadged &&
-      !message.color &&
-      Number.isSafeInteger(numericUserId) &&
-      numericUserId > this.options.freshUserIdThreshold;
     const freshAccount =
-      unbadged &&
-      !message.color &&
-      (hasApiAge ? apiAgeDays < this.options.freshAccountAgeDays : freshById);
+      unbadged && !message.color && hasApiAge && apiAgeDays < this.options.freshAccountAgeDays;
 
     if (unbadged && Number.isSafeInteger(numericUserId)) {
       this.cluster.add(numericUserId, ts);
@@ -558,22 +556,13 @@ export class Analyzer {
       }
       if (freshAccount) {
         score += WEIGHTS.freshAccount;
-        triggers.push(
-          hasApiAge
-            ? {
-                key: 'fresh-account',
-                labelKey: 'trigger.freshAccount',
-                labelParams: { days: apiAgeDays },
-                label: `Новый аккаунт (${apiAgeDays} дн.)`,
-                points: WEIGHTS.freshAccount,
-              }
-            : {
-                key: 'fresh-account',
-                labelKey: 'trigger.freshAccountId',
-                label: 'Новый пустой аккаунт (ID > 1.45 млрд)',
-                points: WEIGHTS.freshAccount,
-              }
-        );
+        triggers.push({
+          key: 'fresh-account',
+          labelKey: 'trigger.freshAccount',
+          labelParams: { days: apiAgeDays },
+          label: `Новый аккаунт (${apiAgeDays} дн.)`,
+          points: WEIGHTS.freshAccount,
+        });
       }
       // Rhythm and sterile text are separate keys so audit dumps can be
       // filtered by either signal; each contributes half of the old weight.
@@ -628,6 +617,8 @@ export class Analyzer {
     const record = {
       id: id || 'local:' + userKey + ':' + ts + ':' + this.totalMessages,
       ts,
+      receivedAt: message.receivedAt ?? currentTime,
+      serverTimestamp: message.serverTimestamp === true,
       channel: String(message.channel || '').toLowerCase(),
       userId: Number.isSafeInteger(numericUserId) ? numericUserId : null,
       numericUserId,
@@ -643,10 +634,9 @@ export class Analyzer {
       roleExempt,
       serviceBot,
       freshAccount,
-      freshById,
       solicitation,
       accountAgeDays: hasApiAge ? apiAgeDays : null,
-      accountAgeSource: hasApiAge ? 'api' : freshById ? 'id' : null,
+      accountAgeSource: hasApiAge ? 'api' : null,
       clusterPeers,
       spamFlood,
       botScore: score,
@@ -678,10 +668,37 @@ export class Analyzer {
     this.totalMessages += 1;
 
     const waveInfo = this.waves.observe(record);
+    if (waveInfo.waveTriggered) {
+      waveInfo.bucket.authors = new Set();
+      waveInfo.bucket.event = {
+        kind: 'chat-wave', ts: currentTime, bucketStart: record.bucketStart,
+        messages: 0, authors: 0,
+      };
+      this.waveCount += 1;
+      this.lastWave = waveInfo.bucket.event;
+    }
     if (waveInfo.wave) {
-      for (let i = 0; i < waveInfo.bucket.records.length; i += 1) {
-        this._applyWaveBoost(waveInfo.bucket.records[i]);
+      const { bucket } = waveInfo;
+      for (const entry of waveInfo.waveTriggered ? bucket.records : [record]) {
+        if (this._applyWaveBoost(entry)) {
+          bucket.authors.add(entry.userKey);
+          bucket.event.messages += 1;
+        }
       }
+      bucket.event.authors = bucket.authors.size;
+    }
+
+    if (waveInfo.waveTriggered) {
+      const context = recordsAt(this.session.records, currentTime);
+      const subjects = context.filter((entry) =>
+        entry.bucketStart === record.bucketStart && entry.waveBoost);
+      const members = new Set(subjects.map((entry) => entry.userKey));
+      waveInfo.bucket.event.atTrigger = {
+        ts: currentTime,
+        rule: ID_GROUP_RULE,
+        groups: describeGroups(findIdGroups(context), context),
+        ...summarizeMatches(subjects, context, members),
+      };
     }
 
     // Save to audit log if enabled and meets criteria
@@ -698,25 +715,37 @@ export class Analyzer {
       record,
       duplicate: false,
       waveTriggered: waveInfo.waveTriggered,
+      waveEvent: waveInfo.bucket.event,
     };
   }
 
-  getStats(now) {
+  getStats(now, since) {
     const currentTime = Number.isFinite(now) ? now : Date.now();
     this._prune(currentTime);
 
-    const stats = this.session.getStats(
-      currentTime,
-      this.options.suspiciousThreshold
-    );
+    const stats = this.session.getStats(currentTime, since);
+    if (!this.idGroupSnapshot || currentTime - this.idGroupSnapshot.ts >= 60000) {
+      const groups = findIdGroups(recordsAt(this.session.records, currentTime));
+      this.idGroupSnapshot = {
+        ts: currentTime, count: groups.length,
+        authors: groups.reduce((total, group) => total + group.memberIds.length, 0),
+      };
+      const byId = new Map(groups.flatMap((group) => group.memberIds.map((id) => [id, group])));
+      this.idGroupsById = byId;
+    }
     const isBotWave = this.waves.isWaveActive(currentTime);
-    const observedMs =
-      this.firstRecordTs === null
+    const observedMs = Number.isFinite(since)
+      ? Math.max(0, currentTime - since)
+      : this.firstRecordTs === null
         ? 0
         : Math.max(0, currentTime - this.firstRecordTs);
 
     return Object.assign({}, stats, {
+      idGroups: this.idGroupSnapshot,
       isBotWave,
+      waveAlert: isBotWave || Boolean(this.lastWave && currentTime - this.lastWave.ts < 30000),
+      waveCount: this.waveCount,
+      lastWave: this.lastWave && { ...this.lastWave },
       waveBucketStart: isBotWave
         ? this.waves.getActiveWaveBucket(currentTime)
         : null,

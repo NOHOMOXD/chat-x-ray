@@ -38,6 +38,7 @@ export class StatsView {
     this.stats = null;
     this.loading = null;
     this.alertState = false;
+    this.disclosure = { open: false };
   }
 
   get hidden() {
@@ -124,6 +125,7 @@ export class StatsView {
     });
     this.loading = loading;
 
+    const waveAlert = stats.chatConnected !== false && (stats.waveAlert || stats.isBotWave);
     const threshold = Number(
       (this.getSettings() || {}).suspiciousThreshold
     );
@@ -136,11 +138,11 @@ export class StatsView {
     // Share (0..1) vs threshold (10..100): compare in percent, never 0.25 >= 25.
     const suspiciousSharePercent = Number(stats.suspiciousShare) * 100;
     const suspiciousAlert =
-      suspiciousSharePercent > 0 && suspiciousSharePercent >= threshold;
+      stats.chatConnected !== false && suspiciousSharePercent > 0 && suspiciousSharePercent >= threshold;
     this.alertState = isAlertState({
-      isBotWave: stats.isBotWave,
+      isBotWave: waveAlert,
       threshold,
-      suspiciousShare: stats.suspiciousShare,
+      suspiciousShare: stats.chatConnected === false ? 0 : stats.suspiciousShare,
     });
     refs.suspicious.classList.toggle('tcx-stats__value--alert', suspiciousAlert);
 
@@ -179,9 +181,14 @@ export class StatsView {
     this.alertState = this.alertState || suspiciousAlert;
     refs.root.classList.toggle('tcx-stats--alert', this.alertState);
     refs.root.classList.toggle('tcx-stats--loading', !loading.ready);
-    refs.root.dataset.wave = stats.isBotWave ? '1' : '0';
+    refs.root.dataset.wave = waveAlert ? '1' : '0';
     refs.root.dataset.loading = String(loading.percent);
-    refs.wave.hidden = !stats.isBotWave;
+    refs.wave.hidden = !waveAlert;
+    this.chatStatus = stats.chatConnected === false ? 'disconnected'
+      : waveAlert ? 'wave'
+      : suspiciousAlert ? 'suspicious'
+        : loading.ready && stats.chatConnected !== false ? 'ok' : 'waiting';
+    refs.root.dataset.tcxState = this.chatStatus;
     tooltipController.refresh(refs.root);
   }
 
@@ -189,6 +196,8 @@ export class StatsView {
     return Object.assign({}, EMPTY_STATS, this.stats || {}, {
       loading: this.loading,
       alertState: this.alertState,
+      chatStatus: this.chatStatus,
+      threshold: Number(this.getSettings()?.suspiciousThreshold) || 0,
     });
   }
 
@@ -270,7 +279,9 @@ export class StatsView {
     };
 
     rootEl.tabIndex = 0;
-    tooltipController.attach(rootEl, () => buildStatsTooltip(this.tooltipModel()));
+    tooltipController.attach(rootEl, () => buildStatsTooltip(this.tooltipModel()), {
+      interactive: true, disclosure: this.disclosure,
+    });
     return rootEl;
   }
 

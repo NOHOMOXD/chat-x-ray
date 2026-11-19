@@ -70,17 +70,22 @@ export class BotLogger {
 
   downloadJson(channel = 'chat') {
     const json = this.getJson(true);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    a.href = url;
-    a.download = `twitch-xray-audit-${channel}-${dateStr}.json`;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 150);
+    downloadJson(json, 'twitch-xray-audit', channel);
   }
+}
+
+export function downloadJson(json, prefix, channel) {
+  const date = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const filename = `${prefix}-${channel || 'chat'}-${date}.json`;
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 150);
 }

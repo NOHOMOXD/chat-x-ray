@@ -11,11 +11,15 @@
  * estimate, so the estimate itself does not jump with the official counter.
  */
 export const VIEWER_HISTORY_DEFAULTS = Object.freeze({
+  maxGapMs: 60000,
+  surgeWindowMs: 120000,
+  surgeMinAbs: 3000,
+  surgeMinRatio: 0.15,
   retainMs: 15 * 60 * 1000,
   medianWindowMs: 10 * 60 * 1000,
   maxSamples: 400,
   minSampleIntervalMs: 3000,
-  // A drop must be at least this large in relative or absolute terms.
+  // A drop must meet both the relative and absolute thresholds.
   dropMinRatio: 0.04,
   dropMinAbs: 300,
   // The peak a drop is measured from must be recent (bots churn fast).
@@ -66,8 +70,18 @@ export class ViewerHistory {
 
   reset() {
     this.samples = [];
+    this.raids = [];
+    this.totalSurges = 0;
+    this.surgeSum = 0;
+    this.lastSurgeAt = -Infinity;
+    this.lastSurge = null;
+    this.lastAnomaly = null;
+    this.lastChurn = null;
     this.churnEvents = [];
     this.dropState = null;
+    this.lastOutflow = null;
+    this.totalOutflows = 0;
+    this.dropBaselineAt = -Infinity;
     this.startedAt = null;
     // Session totals are deliberately not pruned by the 15-minute recent
     // window: the user wants the whole stream's rollback count, not a count
@@ -75,7 +89,6 @@ export class ViewerHistory {
     this.totalChurnEvents = 0;
     this.totalDropSum = 0;
     this.totalMaxDrop = 0;
-    this.dropSamples = [];
   }
 
   /**
@@ -114,10 +127,23 @@ export class ViewerHistory {
       meta && Number.isFinite(meta.cleanUsers) && meta.cleanUsers >= 0
         ? meta.cleanUsers
         : null;
-    this.samples.push({ ts: time, value, clean: cleanUsers });
+    if (last && time - last.ts > this.options.maxGapMs) {
+      this.interrupt();
+    }
+    const sample = { ts: time, value, clean: cleanUsers };
+    this.samples.push(sample);
 
     this._trim(time);
-    this._detectChurn(value, time, cleanUsers);
+    const recovering = this.dropState &&
+      time - this.dropState.at <= this.options.recoveryWindowMs;
+    const outflow = this._detectChurn(value, time, cleanUsers);
+    if (recovering && !this.dropState) {
+      this.lastSurgeAt = time;
+    }
+    if (!recovering) {
+      this._detectSurge(sample, meta?.countMessages);
+    }
+    return { sample, outflow, anomaly: this.lastAnomaly?.ts === time ? this.lastAnomaly : null };
   }
 
   getStats(now) {
@@ -146,9 +172,7 @@ export class ViewerHistory {
     this.churnEvents = this.churnEvents.filter(
       (event) => event.recoveredAt >= churnCutoff
     );
-    const lastEvent = this.churnEvents.length
-      ? this.churnEvents[this.churnEvents.length - 1]
-      : null;
+    const lastEvent = this.lastChurn;
     const recentChurnEvents = this.churnEvents.length;
     const averageDrop = this.totalChurnEvents
       ? Math.round(this.totalDropSum / this.totalChurnEvents)
@@ -159,9 +183,7 @@ export class ViewerHistory {
       this.dropState &&
       time - this.dropState.at > this.options.recoveryWindowMs
     ) {
-      // The window to see a refill elapsed without one; stop advertising a
-      // pending rollback.
-      this.dropState = null;
+      this._closeDrop('unrecovered', this.dropState.at + this.options.recoveryWindowMs);
     }
     if (this.dropState) {
       pendingDrop = {
@@ -189,12 +211,16 @@ export class ViewerHistory {
       churnEvents: recentChurnEvents,
       churnRecent: recentChurnEvents,
       totalChurnEvents: this.totalChurnEvents,
-      churnActive:
-        this.totalChurnEvents >= this.options.churnEventsForAlert,
+      churnActive: recentChurnEvents >= this.options.churnEventsForAlert,
+      totalSurges: this.totalSurges,
+      totalOutflows: this.totalOutflows,
+      lastOutflow: this.lastOutflow && { ...this.lastOutflow },
+      lastSurge: this.lastSurge,
+      averageSurge: this.totalSurges ? Math.round(this.surgeSum / this.totalSurges) : 0,
+      lastAnomaly: this.lastAnomaly,
       averageDrop,
       maxDrop: this.totalMaxDrop,
       totalMaxDrop: this.totalMaxDrop,
-      dropSamples: this.dropSamples.slice(),
       lastEvent,
       pendingDrop,
     };
@@ -217,12 +243,16 @@ export class ViewerHistory {
   _detectChurn(value, now, cleanUsers) {
     const { dropWindowMs, dropMinRatio, dropMinAbs } = this.options;
 
+    if (this.dropState && now - this.dropState.at > this.options.recoveryWindowMs) {
+      this._closeDrop('unrecovered', this.dropState.at + this.options.recoveryWindowMs);
+    }
     let peakValue = 0;
     let peakTs = null;
     let peakClean = null;
+    const cutoff = Math.max(now - dropWindowMs, this.dropBaselineAt);
     for (let i = this.samples.length - 1; i >= 0; i -= 1) {
       const sample = this.samples[i];
-      if (sample.ts < now - dropWindowMs) {
+      if (sample.ts < cutoff) {
         break;
       }
       if (sample.value > peakValue) {
@@ -254,17 +284,31 @@ export class ViewerHistory {
     }
 
     const state = this.dropState;
-    if (value <= state.low) {
+    if (value < state.low) {
       state.low = value;
       state.lowTs = now;
       state.lowClean = cleanUsers;
     }
 
+    const stillBelow = state.from - value >= Math.max(dropMinAbs, state.from * dropMinRatio);
+    let outflow;
+    if (!state.event && stillBelow && now - state.at >= this.options.dropConfirmMs) {
+      outflow = state.event = {
+        kind: 'viewer-outflow', ts: state.at, from: state.from,
+        fromTs: state.fromTs, confirmedAt: now, status: 'observing',
+      };
+      this.lastOutflow = outflow;
+      this.totalOutflows += 1;
+    }
+    if (state.event) {
+      Object.assign(state.event, {
+        to: state.low, lowTs: state.lowTs, delta: state.low - state.from,
+      });
+    }
+
     if (value >= state.from * (1 - this.options.recoveryRatio)) {
-      // Ignore a single bad sample: a real bot rollback lasts, a CDN/UI
-      // glitch does not.
       if (now - state.at < this.options.dropConfirmMs) {
-        this.dropState = null;
+        this._closeDrop('unrecovered', now);
         return;
       }
       const event = {
@@ -279,21 +323,84 @@ export class ViewerHistory {
         erAfter: erPercent(cleanUsers, value),
       };
       this.churnEvents.push(event);
+      this.lastChurn = event;
+      this.lastAnomaly = {
+        kind: 'churn', ts: now, from: event.from, to: event.low,
+        delta: -event.drop, durationMs: event.durationMs,
+        fromTs: state.fromTs, lowTs: state.lowTs,
+      };
       this.totalChurnEvents += 1;
       this.totalDropSum += event.drop;
       this.totalMaxDrop = Math.max(this.totalMaxDrop, event.drop);
-      this.dropSamples.push(event.drop);
-      if (this.dropSamples.length > 12) {
-        this.dropSamples.shift();
-      }
-      this.dropState = null;
+      this._closeDrop('recovered', now);
+    }
+    return outflow;
+  }
+
+  _closeDrop(status, now) {
+    const event = this.dropState?.event;
+    if (event) {
+      event.status = status;
+      event.closedAt = now;
+      if (status === 'recovered') event.recoveredAt = now;
+    }
+    this.dropBaselineAt = now;
+    this.dropState = null;
+  }
+
+  interrupt(now = this.samples.at(-1)?.ts ?? Date.now()) {
+    this.samples = [];
+    this._closeDrop('interrupted', now);
+  }
+
+  recordRaid(raid) {
+    this.raids = this.raids.filter((event) => event.ts >= raid.ts - this.options.retainMs);
+    if (this.raids.some((event) => event.id === raid.id)) {
+      return false;
+    }
+    this.raids.push(raid);
+    return true;
+  }
+
+  _detectSurge(sample, countMessages) {
+    const { surgeWindowMs, surgeMinAbs, surgeMinRatio } = this.options;
+    if (sample.ts - this.lastSurgeAt <= surgeWindowMs) {
       return;
     }
-
-    if (now - state.at > this.options.recoveryWindowMs) {
-      // The audience really got smaller (purge without a refill); not a churn
-      // cycle. Forget the pending drop and let a new peak form.
-      this.dropState = null;
+    const cutoff = Math.max(sample.ts - surgeWindowMs, this.lastSurgeAt);
+    let from = sample;
+    for (const previous of this.samples) {
+      if (previous.ts >= cutoff && previous.value <= from.value && previous.ts < sample.ts) {
+        from = previous;
+      }
     }
+    const delta = sample.value - from.value;
+    if (from.value <= 0 || delta < Math.max(surgeMinAbs, from.value * surgeMinRatio)) {
+      return;
+    }
+    const durationMs = sample.ts - from.ts;
+    const before = countMessages?.(from.ts - surgeWindowMs, from.ts);
+    const during = countMessages?.(from.ts, sample.ts);
+    const beforeRate = Number.isFinite(before) ? before * 60000 / surgeWindowMs : null;
+    const duringRate = Number.isFinite(during) ? during * 60000 / durationMs : null;
+    const raid = this.raids.reduce((nearest, event) =>
+      event.ts <= sample.ts && sample.ts - event.ts <= 180000 &&
+        (!nearest || event.ts > nearest.ts) ? event : nearest, null);
+    const peak = this.samples.reduce((highest, previous) =>
+      previous.ts < from.ts && previous.ts >= from.ts - this.options.recoveryWindowMs &&
+      (!highest || previous.value > highest.value) ? previous : highest, null);
+    const precedingDrop = peak && peak.value - from.value >=
+      Math.max(this.options.dropMinAbs, peak.value * this.options.dropMinRatio)
+      ? { from: peak.value, to: from.value, fromTs: peak.ts, ts: from.ts }
+      : null;
+    this.lastSurgeAt = sample.ts;
+    this.totalSurges += 1;
+    this.surgeSum += delta;
+    this.lastAnomaly = this.lastSurge = {
+      kind: 'surge', ts: sample.ts, from: from.value, to: sample.value,
+      delta, durationMs, fromTs: from.ts, beforeRate, duringRate,
+      rateRatio: beforeRate > 0 && duringRate !== null ? duringRate / beforeRate : null,
+      raid, precedingDrop,
+    };
   }
 }

@@ -1,3 +1,5 @@
+import { SessionCapture } from '../analysis/session-capture.js';
+import { downloadJson } from '../config/bot-logger.js';
 /*
  * Twitch Chat X-Ray — application controller (ISOLATED world).
  * Manages lifecycle, composition and DOM updates:
@@ -12,7 +14,7 @@
  * from the browser languages (only Russian is honoured; everything else falls
  * back to English).
  */
-import { Analyzer } from '../core/analyzer.js';
+import { Analyzer, WEIGHTS } from '../core/analyzer.js';
 import { MessageBinder } from '../ui/chat/message-binder.js';
 import { StatsView } from '../ui/chat/stats-view.js';
 import { SettingsModal } from '../ui/settings/settings-panel.js';
@@ -168,7 +170,7 @@ export class ChatXRayApp {
     // Resolve the interface language before any UI is created, so the first
     // paint already uses the browser language (or the saved choice).
     setLocale(resolveLocale(this.settings.language));
-    // The analyzer must already run with the saved threshold (default 25%),
+    // The analyzer must already run with the saved threshold (default 30%),
     // otherwise the first seconds of chat are scored against a stale value.
     this.analyzer = new Analyzer(this.settings);
     this.accountAgeService = new AccountAgeService({
@@ -176,35 +178,43 @@ export class ChatXRayApp {
       onAge: (login, ageDays) => this.handleAccountAge(login, ageDays),
       onError: (error) =>
         console.warn(
-          '[Twitch Chat X-Ray] account age lookup failed; local heuristic stays active',
+          '[Twitch Chat X-Ray] account age lookup failed',
           error
         ),
     });
     this.channel = getChannelSlug();
     this.previousChannel = this.channel;
+    this.openSockets = new Set();
+    this.chatSince = null;
+    this.capture = null;
+    this.finishedCapture = null;
+    this.lastMaintenance = null;
+    this.lastViewerSample = null;
+    this.viewerGap = false;
     this.urlLagChannel = '';
-    this.channelChangedAt = 0;
+    this.channelChangedAt = Date.now();
     this.lastMessageChannel = '';
-    this.lastMessageAt = 0;
     this.erBaselineStore = new ErBaselineStore();
     this.container = null;
     this.pageObserver = null;
-    this.maintenanceTimer = null;
-    this.navigationTimer = null;
     this.bindScheduled = false;
     this.statsScheduled = false;
     this.started = false;
     this.bridgeToken = createBridgeToken();
 
     this.binder = new MessageBinder({
-      getSettings: () => this.settings,
+      getSettings: () => ({ ...this.settings, getIdGroup: (id) => this.analyzer.idGroupsById.get(id) }),
     });
     this.statsView = new StatsView({
-      getStats: () => this.analyzer.getStats(),
+      getStats: () => this.getViewerStats(),
       getSettings: () => this.settings,
     });
     this.viewerCounter = new ViewerCounterAdjuster({
-      getStats: () => this.analyzer.getStats(),
+      getStats: (now) => this.getViewerStats(now),
+      getMinute: (now, samples, stats) => this.getMinute(now, samples, stats),
+      countMessages: (from, to) => this.countMessages(from, to),
+      onSample: (accepted) => this.recordViewerSample(accepted),
+      onModel: (model) => this.capture?.recordModel(model),
       getSettings: () => this.settings,
       channel: this.channel,
       baselineStore: this.erBaselineStore,
@@ -212,6 +222,7 @@ export class ChatXRayApp {
     this.settingsPanel = new SettingsModal({
       getSettings: () => this.settings,
       getLogger: () => this.analyzer.logger,
+      downloadSession: (previous) => this.downloadSession(previous),
       onPreview: (next) => this.applySettings(next, false),
       onCommit: (next) => this.applySettings(next, true),
     });
@@ -267,10 +278,8 @@ export class ChatXRayApp {
     // SPA navigation does not fire popstate; a cheap 250 ms poll notices the
     // URL change before Twitch's old viewer count can contaminate the new
     // channel's history. The 1 s maintenance loop stays for DOM work.
-    this.navigationTimer = window.setInterval(
-      () => this.handleNavigation(),
-      250
-    );
+    window.setInterval(() => this.handleNavigation(), 250);
+    document.addEventListener('freeze', () => this.interruptObservation('freeze'));
     window.addEventListener('pagehide', () => {
       this.viewerCounter.finish();
       this.erBaselineStore.flush();
@@ -279,7 +288,7 @@ export class ChatXRayApp {
       this.viewerCounter.update(this.channel);
     });
 
-    this.maintenanceTimer = window.setInterval(() => this.maintenance(), 1000);
+    window.setInterval(() => this.maintenance(), 1000);
     this.maintenance();
   }
 
@@ -349,6 +358,25 @@ export class ChatXRayApp {
     let waveTriggered = false;
     for (let i = 0; i < data.messages.length; i += 1) {
       const message = data.messages[i];
+      if (message?.kind === 'socket-open' || message?.kind === 'socket-close') {
+        if (!Number.isSafeInteger(message.socketId)) {
+          continue;
+        }
+        if (message.kind === 'socket-open') {
+          this.openSockets.add(message.socketId);
+          this.chatSince ??= Date.now();
+        } else if (this.openSockets.delete(message.socketId) && !this.openSockets.size) {
+          this.interruptChat('irc-close');
+        }
+        continue;
+      }
+      if (message?.kind === 'raid') {
+        if (message.channel === this.channel && typeof message.id === 'string' &&
+            Number.isFinite(message.ts) && this.viewerCounter.history.recordRaid(message)) {
+          this.capture?.events.push(message);
+        }
+        continue;
+      }
       if (!isValidPayload(message)) {
         continue;
       }
@@ -358,7 +386,6 @@ export class ChatXRayApp {
         : '';
       if (messageChannel) {
         this.lastMessageChannel = messageChannel;
-        this.lastMessageAt = Date.now();
         // Chat is authoritative: the IRC socket switches before/with the SPA
         // URL, so the first PRIVMSG is a reliable channel-change signal even
         // if the old page is still mounted.
@@ -383,17 +410,21 @@ export class ChatXRayApp {
         continue;
       }
 
+      const now = Date.now();
+      this.chatSince ??= Number.isFinite(message.receivedAt) ? Math.min(now, message.receivedAt) : now;
       const result = this.analyzer.ingest(message);
       if (result.duplicate || !result.record) {
         continue;
       }
 
       this.binder.addPending(result.record);
-      this.accountAgeService.maybeLookup(
-        result.record.login,
-        result.record.botScore
-      );
+      const { record } = result;
+      const eligibleForFreshPoints = record.unbadged && !record.color &&
+        !record.roleExempt && !record.serviceBot && record.accountAgeDays === null;
+      this.accountAgeService.maybeLookup(record.login, record.botScore,
+        eligibleForFreshPoints ? WEIGHTS.freshAccount : 0);
       if (result.waveTriggered) {
+        this.capture?.events.push(result.waveEvent);
         waveTriggered = true;
       }
     }
@@ -538,6 +569,13 @@ export class ChatXRayApp {
     // Remember which URL value would be a lagging old page after a chat-first
     // switch; a URL reset means there is no lag to protect against.
     this.urlLagChannel = fromMessage ? this.previousChannel : '';
+    if (this.capture) {
+      this.finishedCapture = this.buildSessionSnapshot();
+      this.capture = null;
+    }
+    this.chatSince = this.openSockets.size && channel ? Date.now() : null;
+    this.lastViewerSample = null;
+    this.viewerGap = false;
     this.analyzer.reset();
     this.accountAgeService.resetQueue();
     this.channel = channel;
@@ -577,9 +615,106 @@ export class ChatXRayApp {
     }, 250);
   }
 
+  getViewerStats(now = Date.now()) {
+    return {
+      ...this.analyzer.getStats(now, this.chatSince ?? now),
+      observationMs: Math.max(0, now - this.channelChangedAt),
+      chatConnected: this.chatSince !== null,
+    };
+  }
+
+  countMessages(from, to) {
+    if (this.chatSince === null || from < this.chatSince) {
+      return null;
+    }
+    return this.analyzer.session.records.reduce((count, record) =>
+      count + Number(record.ts > from && record.ts <= to), 0);
+  }
+
+  getMinute(now, samples, stats = this.getViewerStats(now)) {
+    if (this.chatSince === null || now - this.chatSince < 60000) {
+      return null;
+    }
+    const start = samples.findLast((sample) => sample.ts <= now - 60000);
+    const end = samples.at(-1);
+    return {
+      messages: stats.messagesPerMinute,
+      authors: stats.minuteUsers,
+      from: start && now - start.ts <= 66000 && end && now - end.ts <= 6000
+        ? start.value : null,
+      to: end?.value ?? null,
+    };
+  }
+
+  interruptChat(reason) {
+    if (this.chatSince !== null) {
+      this.capture?.events.push({ kind: 'chat-gap', ts: Date.now(), reason });
+    }
+    this.chatSince = null;
+  }
+
+  interruptObservation(reason) {
+    this.interruptChat(reason);
+    this.viewerCounter.history.interrupt(Date.now());
+    this.capture?.events.push({ kind: 'viewer-gap', ts: Date.now(), reason });
+    this.lastViewerSample = null;
+    this.viewerGap = false;
+  }
+
+  recordViewerSample({ sample, anomaly, outflow }) {
+    if (this.lastViewerSample !== null && sample.ts - this.lastViewerSample > 60000 &&
+        !this.viewerGap) {
+      this.capture?.events.push({
+        kind: 'viewer-gap', ts: this.lastViewerSample, resumedAt: sample.ts,
+      });
+    } else if (this.viewerGap) {
+      this.capture?.events.push({ kind: 'viewer-resume', ts: sample.ts });
+    }
+    this.lastViewerSample = sample.ts;
+    this.viewerGap = false;
+    this.capture?.viewerSamples.push(sample);
+    if (outflow) this.capture?.events.push(outflow);
+    if (anomaly) {
+      this.capture?.events.push(anomaly);
+    }
+  }
+
+  buildSessionSnapshot() {
+    const now = Date.now();
+    return this.capture.snapshot(
+      now, this.analyzer.session.records, this.getViewerStats(now),
+      this.viewerCounter.model, this.settings
+    );
+  }
+
+  downloadSession(previous) {
+    const snapshot = previous ? this.finishedCapture :
+      this.capture && this.buildSessionSnapshot();
+    if (snapshot) {
+      downloadJson(JSON.stringify(snapshot, null, 2), 'twitch-xray-session', snapshot.channel);
+    }
+  }
+
   maintenance() {
     try {
       this.handleNavigation();
+      const now = Date.now();
+      if (this.lastMaintenance !== null && now - this.lastMaintenance > 60000) {
+        this.interruptObservation('maintenance-gap');
+      }
+      this.lastMaintenance = now;
+      if (!this.settings.recordSession) {
+        if (this.capture) {
+          this.finishedCapture = this.buildSessionSnapshot();
+          this.capture = null;
+        }
+      } else if (!this.capture && this.channel) {
+        this.capture = new SessionCapture(this.channel, now);
+      }
+      this.capture?.updateSettings(this.settings, now);
+      if (this.chatSince === null && this.openSockets.size && this.channel) {
+        this.chatSince = now;
+      }
 
       const nextContainer = findMessageContainer();
       if (nextContainer !== this.container) {
@@ -596,6 +731,25 @@ export class ChatXRayApp {
       this.binder.cleanup();
       this.statsView.update();
       this.viewerCounter.update(this.channel);
+      if (this.renderedIdGroups !== this.analyzer.idGroupSnapshot) {
+        const hadGroups = this.renderedIdGroups?.count;
+        this.renderedIdGroups = this.analyzer.idGroupSnapshot;
+        if (hadGroups || this.renderedIdGroups?.count) this.binder.refresh();
+      }
+      if (this.lastViewerSample !== null && now - this.lastViewerSample > 60000 &&
+          !this.viewerGap) {
+        this.capture?.events.push({ kind: 'viewer-gap', ts: this.lastViewerSample });
+        this.viewerGap = true;
+      }
+      if (this.capture) {
+        const at = Date.now();
+        this.capture.observe(
+          at, this.getViewerStats(at), this.viewerCounter.model,
+          this.analyzer.session.records, this.settings,
+          this.getMinute(at, this.viewerCounter.history.samples)
+        );
+      }
+      this.settingsPanel.syncSessionButtons(Boolean(this.capture), Boolean(this.finishedCapture));
       if (this.settings.enableAuditLog) {
         this.settingsPanel.syncAuditCount();
       }

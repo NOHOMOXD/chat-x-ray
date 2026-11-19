@@ -11,8 +11,7 @@
  * same gates the estimate uses (observation time, clean chatters, messages).
  * Once the range exists it is shown instead of the percentage.
  *
- * A bot wave in chat (or a warn/critical viewer verdict) turns the counter red
- * as a passive signal; the tooltip always explains why.
+ * The counter highlights recent movements in online viewers and low engagement.
  *
  * The estimate is built from clean unique chatters, not from the share of
  * suspicious chatters: viewbots watch the stream without joining IRC, so a
@@ -23,7 +22,6 @@
 import {
   formatNumber,
   formatViewerRangeCompact,
-  isAlertState,
   setAttributeIfChanged,
   setTextIfChanged,
 } from '../shared/ui-utils.js';
@@ -99,10 +97,6 @@ export function parseTwitchViewerCount(rawText) {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-export function formatViewerCount(value, locale) {
-  return formatNumber(value, locale || getLocale());
-}
-
 export function formatViewerRange(range, locale) {
   if (!range) {
     return '';
@@ -112,15 +106,6 @@ export function formatViewerRange(range, locale) {
     range.high,
     resolved
   )}`;
-}
-
-export function getViewerBotRatio(stats) {
-  const activeUsers = Math.max(0, Number(stats.activeUsers) || 0);
-  const suspiciousUsers = Math.max(0, Number(stats.suspiciousUsers) || 0);
-  if (!activeUsers) {
-    return 0;
-  }
-  return Math.min(1, suspiciousUsers / activeUsers);
 }
 
 /**
@@ -147,15 +132,6 @@ export function buildCounterParts(model) {
     ? ` (≈${formatViewerRangeCompact(model.range, getLocale())})`
     : ` (${t('counter.loading')}…)`;
   return { loading: false, text };
-}
-
-/** Plain text for the parentheses (tests, aria, non-DOM callers). */
-export function buildCounterText(model) {
-  const parts = buildCounterParts(model);
-  if (!parts.loading) {
-    return parts.text;
-  }
-  return `${parts.prefix}${parts.word}… ${parts.percent})`;
 }
 
 function counterAria(model) {
@@ -194,17 +170,8 @@ function counterAria(model) {
       })
     );
   }
-  parts.push(
-    t('viewer.suspicious', {
-      users: model.suspiciousUsers,
-      active: model.activeUsers,
-    })
-  );
-  if (model.isBotWave) {
-    parts.push(t('viewer.wave'));
-  }
-  if (model.verdict) {
-    parts.push(t('viewer.status', { label: t(model.verdict.labelKey) }));
+  if (model.viewerStatus) {
+    parts.push(t('tip.status.' + model.viewerStatus));
   }
   return parts.join(' ');
 }
@@ -213,6 +180,11 @@ export class ViewerCounterAdjuster {
   constructor(options) {
     this.getStats = options.getStats;
     this.getSettings = options.getSettings;
+    this.getMinute = options.getMinute || (() => null);
+    this.countMessages = options.countMessages;
+    this.onSample = options.onSample;
+    this.onModel = options.onModel;
+    this.lastModel = null;
     this.history = new ViewerHistory(
       Object.assign({ warmupMs: 8000 }, options.viewerHistory || {})
     );
@@ -236,7 +208,7 @@ export class ViewerCounterAdjuster {
     }
 
     const settings = this.getSettings();
-    if (!settings.adjustViewerCounter) {
+    if (!settings.adjustViewerCounter && !settings.recordSession) {
       this.remove();
       return;
     }
@@ -252,19 +224,19 @@ export class ViewerCounterAdjuster {
 
     const target = this._findViewerCountElement();
     if (!target) {
-      this.remove();
+      this.showLastMeasurement(settings, now);
       return;
     }
 
     const twitchViewers = parseTwitchViewerCount(target.textContent || '');
     if (twitchViewers === null) {
-      this.remove();
+      this.showLastMeasurement(settings, now);
       return;
     }
 
     // Every maintenance tick samples the official number; the history keeps a
     // bounded timeline and finds drop-and-refill cycles.
-    const stats = this.getStats();
+    const stats = this.getStats(now);
     const threshold = Number(settings.suspiciousThreshold) || 0;
     if (!this.tracker || this.tracker.threshold !== threshold) {
       this.finishTracker(now);
@@ -278,10 +250,14 @@ export class ViewerCounterAdjuster {
       this.threshold = threshold;
     }
 
-    this.history.record(twitchViewers, now, {
+    const accepted = this.history.record(twitchViewers, now, {
       cleanUsers: stats.cleanUsers,
+      countMessages: this.countMessages,
     });
-    if (this.tracker) {
+    if (accepted) {
+      this.onSample?.(accepted);
+    }
+    if (this.tracker && stats.sessionMs >= 600000) {
       this.tracker.observe(
         twitchViewers,
         stats.cleanUsers,
@@ -290,20 +266,60 @@ export class ViewerCounterAdjuster {
       );
     }
 
-    const model = buildViewerModel({
+    const modelInput = {
       official: twitchViewers,
+      minute: this.getMinute(now, this.history.samples, stats),
       stats,
       history: this.history.getStats(now),
       baseline: this.tracker ? this.tracker.getBaseline() : null,
-    });
+    };
+    const model = buildViewerModel(modelInput);
 
     if (!model) {
       this.remove();
       return;
     }
     model.threshold = threshold;
+    model.sampledAt = now;
+    model.input = modelInput;
+    model.observationMs = stats.observationMs;
+    model.chatAlert = stats.chatConnected !== false && (stats.waveAlert ||
+      (stats.suspiciousShare > 0 && stats.suspiciousShare * 100 >= threshold));
+    model.viewerStatus = model.churn.lastAnomaly &&
+      now - model.churn.lastAnomaly.ts < this.history.options.churnWindowMs
+      ? model.churn.lastAnomaly.kind
+      : model.engagement?.alert ? 'lowEr'
+        : stats.chatConnected === false ? 'disconnected'
+          : model.engagement?.measurable && model.range ? 'ok' : 'waiting';
+    this.lastModel = model;
+    this.onModel?.(model);
 
-    this._render(target, model);
+    if (settings.adjustViewerCounter) {
+      this._render(target, model);
+    } else {
+      this.remove();
+      this.model = model;
+    }
+  }
+
+  showLastMeasurement(settings, now) {
+    const last = this.history.samples.at(-1);
+    if (last && now - last.ts > this.history.options.maxGapMs) {
+      this.history.interrupt(last.ts + this.history.options.maxGapMs);
+    }
+    if (!settings.adjustViewerCounter || !this.lastModel) {
+      this.remove();
+      return;
+    }
+    const target = this.targetNode?.isConnected ? this.targetNode
+      : document.querySelector('[data-tcx-ui="stats"]');
+    if (target) {
+      const { lastOutflow } = this.history.getStats(now);
+      const churn = { ...this.lastModel.churn, lastOutflow };
+      this._render(target, { ...this.lastModel, churn, stale: true, viewerStatus: 'stale' });
+    } else {
+      this.remove();
+    }
   }
 
   finishTracker(now) {
@@ -324,6 +340,7 @@ export class ViewerCounterAdjuster {
     this.finishTracker(Date.now());
     this.remove();
     this.history.reset();
+    this.lastModel = null;
     this.settleUntil = Date.now() + this.settleMs;
   }
 
@@ -367,42 +384,25 @@ export class ViewerCounterAdjuster {
         target.parentNode.insertBefore(this.el, target.nextSibling);
       }
 
-      tooltipController.attach(this.el, () => buildViewerTooltip(this.model));
+      tooltipController.attach(this.el, () => buildViewerTooltip(this.model), { interactive: true });
     }
 
     this.model = model;
 
-    const loading = Boolean(model.loading && !model.loading.ready);
-    const alertState = isAlertState({
-      isBotWave: model.isBotWave,
-      verdict: model.verdict,
-      threshold: model.threshold,
-      suspiciousShare: model.activeUsers
-        ? model.suspiciousUsers / model.activeUsers
-        : 0,
-    });
+    const loading = !model.stale && Boolean(model.loading && !model.loading.ready);
+    const alertState = ['churn', 'surge', 'lowEr'].includes(model.viewerStatus);
 
     this._renderText(model, loading);
 
     this.el.classList.toggle('tcx-real-viewers--alert', alertState);
-    this.el.classList.toggle('tcx-real-viewers--wave', Boolean(model.isBotWave));
     this.el.classList.toggle('tcx-real-viewers--loading', loading);
-    this.el.classList.toggle(
-      'tcx-real-viewers--nodata',
-      !model.range && !loading
-    );
-    this.el.dataset.tcxState = model.isBotWave
-      ? 'wave'
-      : alertState
-        ? 'alert'
-        : loading
-          ? 'loading'
-          : 'ok';
+    this.el.classList.toggle('tcx-real-viewers--nodata', !model.range && !loading);
+    this.el.dataset.tcxState = alertState ? 'alert' : loading ? 'loading' : model.viewerStatus;
     this.el.dataset.tcxPercent = String(
       model.loading ? model.loading.percent : 100
     );
 
-    setAttributeIfChanged(this.el, 'aria-label', counterAria(model));
+    setAttributeIfChanged(this.el, 'aria-label', model.stale ? t('tip.status.stale') : counterAria(model));
     tooltipController.refresh(this.el);
   }
 
@@ -416,7 +416,7 @@ export class ViewerCounterAdjuster {
    * a DOM write the page MutationObserver could react to.
    */
   _renderText(model, loading) {
-    const parts = buildCounterParts(model);
+    const parts = model.stale ? { text: t('tip.status.stale') } : buildCounterParts(model);
 
     if (!parts.loading) {
       const text = parts.text;

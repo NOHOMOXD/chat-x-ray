@@ -44,22 +44,43 @@ async function launchWithExtension(browserName) {
   }
 
   const { firefox } = await import('@playwright/test');
-  return firefox.launchPersistentContext('', {
+  // Playwright launches Firefox without loading add-ons from the profile.
+  // Use the existing web-ext tooling to install the build as a temporary add-on.
+  const remoteModule = new URL('./lib/firefox/remote.js', import.meta.resolve('web-ext'));
+  const { connectWithMaxRetries, findFreeTcpPort } = await import(remoteModule.href);
+  const port = await findFreeTcpPort();
+  const context = await firefox.launchPersistentContext('', {
     headless: true,
+    args: [`--start-debugger-server=${port}`],
     firefoxUserPrefs: {
-      'xpinstall.signatures.required': false,
-      'extensions.autoDisableScopes': 0,
-      'extensions.enabledScopes': 15,
+      'devtools.debugger.remote-enabled': true,
+      'devtools.debugger.prompt-connection': false,
+      'devtools.debugger.force-local': true,
     },
   });
+  try {
+    const remote = await connectWithMaxRetries({ port, maxRetries: 20 });
+    try {
+      await remote.installTemporaryAddon(path.join(DIST, 'firefox'));
+    } finally {
+      remote.disconnect();
+    }
+    return context;
+  } catch (error) {
+    await context.close();
+    throw error;
+  }
 }
 
 export const test = base.extend({
   // eslint-disable-next-line no-empty-pattern
   context: async ({ browserName }, use) => {
     const context = await launchWithExtension(browserName);
-    await use(context);
-    await context.close();
+    try {
+      await use(context);
+    } finally {
+      await context.close();
+    }
   },
   page: async ({ context }, use) => {
     const page = await context.newPage();

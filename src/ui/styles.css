@@ -40,6 +40,11 @@
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
 
+.tcx-bot-badge--id-group {
+  background: #dddde3;
+  border-color: #aaaab4;
+}
+
 .tcx-bot-badge:hover {
   box-shadow: 0 2px 7px rgba(0, 0, 0, 0.38);
   transform: translateY(-1px);
@@ -364,10 +369,9 @@
 /* Settings entry row inside Twitch's own Chat Settings menu                 */
 /* ------------------------------------------------------------------------- */
 
-/* One plain row appended after the last native option, like BetterTTV's
-   "BetterTV Settings": same left alignment, same text size, a trailing
-   chevron so it reads as "opens another screen". Typography is inherited
-   from Twitch so the row never looks foreign. */
+/* One plain row appended as the last child of the settings container, so it
+   never lands inside a BetterTTV or 7TV group. Same left alignment and text
+   size as Twitch's own entries; typography is inherited so it looks native. */
 .tcx-settings-row {
   display: flex !important;
   align-items: center;
@@ -407,14 +411,7 @@
   min-width: 0;
 }
 
-.tcx-settings-row__chevron {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  opacity: 0.8;
-}
-
-/* Separator above our group, like the rule Twitch/BTTV use between blocks. */
+/* Separator above our row, like the rule Twitch/BTTV use between blocks. */
 .tcx-settings-row--native {
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   margin-top: 4px;
@@ -550,17 +547,6 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
-}
-
-.tcx-modal__tag {
-  flex: 0 0 auto;
-  padding: 2px 7px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  color: var(--color-text-alt, #adadb8);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
 }
 
 .tcx-modal__close {
@@ -1115,6 +1101,10 @@
   white-space: nowrap;
 }
 
+.tcx-tip__value--wrap {
+  white-space: normal;
+}
+
 .tcx-tip__value--alert,
 .tcx-tip__note--alert {
   color: #ff8a8a;
@@ -1214,9 +1204,8 @@
 }
 
 .tcx-tip__hero {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
+  display: grid;
+  gap: 4px;
   margin: 1px 0 7px;
 }
 
@@ -1230,7 +1219,7 @@
 }
 
 .tcx-tip__hero-value--range {
-  font-size: 20px;
+  font-size: clamp(16px, 8vw, 24px);
   letter-spacing: -0.02em;
   white-space: nowrap;
 }
@@ -1265,4 +1254,78 @@
     content: "…";
   }
 
+}
+
+.tcx-tip__head[data-status='neutral'] .tcx-tip__dot,
+.tcx-tip__head[data-status='ok'] .tcx-tip__dot,
+.tcx-tip__head[data-status='alert'] .tcx-tip__dot {
+  background: var(--tcx-status-color);
+  box-shadow: none;
+}
+
+.tcx-tip__head[data-status='neutral'] { --tcx-status-color: #c4c4ce; }
+.tcx-tip__head[data-status='ok'] { --tcx-status-color: #5bd798; }
+.tcx-tip__head[data-status='alert'] { --tcx-status-color: #ff8a8a; }
+
+.tcx-tip__event {
+  display: grid;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.tcx-tip__event-meta {
+  color: var(--color-text-alt, #adadb8);
+  overflow-wrap: break-word;
+  font-variant-numeric: tabular-nums;
+}
+
+.tcx-tip__status {
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+.tcx-tip__head[data-status='alert'] ~ .tcx-tip__status {
+  color: #ff8a8a;
+}
+
+.tcx-tip__details {
+  margin-top: 8px;
+  border-top: 1px solid var(--color-border-base, #38383f);
+  padding-top: 8px;
+}
+
+.tcx-tip__details summary {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.tcx-tip__details[open] .tcx-tip__list {
+  margin-top: 6px;
+}
+
+.tcx-tip--summary {
+  box-sizing: border-box;
+  width: min(340px, calc(100vw - 24px));
+  min-width: 0;
+  max-width: 100%;
+  max-height: min(75vh, 34rem);
+  overflow: auto;
+}
+
+.tcx-tip__hero-value--loading {
+  font-size: 16px;
+}
+
+.tcx-tip__loading-check {
+  color: var(--color-text-alt, #adadb8);
+}
+
+.tcx-tip--summary .tcx-tip__row > .tcx-tip__value {
+  min-width: 0;
+  white-space: normal;
+}
+
+.tcx-tip__foot--plain {
+  border-top: 0;
+  padding-top: 0;
 }

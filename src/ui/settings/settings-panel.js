@@ -52,6 +52,8 @@ export class SettingsModal {
     this.onCommit = options.onCommit;
     this.onPreview = options.onPreview || (() => {});
     this.getLogger = options.getLogger || (() => null);
+    this.downloadSession = options.downloadSession || (() => {});
+    this.sessionAvailability = [false, false];
 
     this.button = null;
     this.buttonHost = null;
@@ -60,7 +62,6 @@ export class SettingsModal {
     this.menuRowHost = null;
     this.refs = null;
     this.open = false;
-    this.lastFocus = null;
 
     this._onInput = this._onInput.bind(this);
     this._onChange = this._onChange.bind(this);
@@ -94,14 +95,22 @@ export class SettingsModal {
   }
 
   /**
-   * Keep a labelled "Chat X-Ray Settings" row at the bottom of Twitch's own
-   * Chat Settings menu — the same place BetterTTV puts "BetterTV Settings".
+   * Keep a labelled "Chat X-Ray Settings" row at the end of Twitch's own Chat
+   * Settings menu. Appending last is deliberate: BetterTTV and 7TV build their
+   * own groups inside the same container, so any fixed insertion point would
+   * either land inside or interleave with a foreign group. The end of the
+   * container is the one position whose ownership we can state outright.
    * Twitch renders the popover only while it is open, so this is re-checked on
    * every page mutation and in the 1 s maintenance loop.
    */
   ensureMenuRow() {
     const host = this._findSettingsMenuHost();
     if (this.menuRow && this.menuRow.isConnected && host === this.menuRowHost) {
+      // A later-mounted extension (7TV appends its group after us) must not
+      // leave our row stranded above it: re-assert the last position.
+      if (host.lastElementChild !== this.menuRow) {
+        host.appendChild(this.menuRow);
+      }
       return this.menuRow;
     }
     if (this.menuRow) {
@@ -116,7 +125,7 @@ export class SettingsModal {
     const row = this._createMenuRow();
     if (this._hasNativeToggles(host)) {
       // Older popover layouts render every option as a toggle row; keep the
-      // same skeleton with a trailing chevron so ours looks native.
+      // same skeleton so ours does not look out of place.
       row.classList.add('tcx-settings-row--native');
     }
     host.appendChild(row);
@@ -152,7 +161,6 @@ export class SettingsModal {
       return;
     }
     this.open = true;
-    this.lastFocus = document.activeElement;
     const modal = this._createModal();
     this.modal = modal;
     root().appendChild(modal);
@@ -280,6 +288,13 @@ export class SettingsModal {
       }
       this.syncAuditCount();
     }
+  }
+
+  syncSessionButtons(current, previous) {
+    this.sessionAvailability = [current, previous];
+    this.modal?.querySelectorAll('[data-tcx-session-export]').forEach((button) => {
+      button.disabled = !this.sessionAvailability[Number(button.dataset.tcxSessionExport)];
+    });
   }
 
   syncAuditCount() {
@@ -418,19 +433,7 @@ export class SettingsModal {
     label.dataset.tcxI18n = 'app.settingsEntry';
     label.textContent = t('app.settingsEntry');
 
-    const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    chevron.setAttribute('viewBox', '0 0 20 20');
-    chevron.setAttribute('width', '20');
-    chevron.setAttribute('height', '20');
-    chevron.setAttribute('aria-hidden', 'true');
-    chevron.setAttribute('focusable', 'false');
-    chevron.setAttribute('class', 'tcx-settings-row__chevron');
-    chevron.appendChild(
-      svgPath('M7.5 4.5 13 10l-5.5 5.5-1.4-1.4L10.2 10 6.1 5.9z')
-    );
-
     row.appendChild(label);
-    row.appendChild(chevron);
 
     row.addEventListener('click', (event) => {
       // Stop Twitch's menu from closing and swallowing the click.
@@ -489,10 +492,8 @@ export class SettingsModal {
     const icon = el('span', 'tcx-modal__icon');
     const h2 = el('h2', 'tcx-modal__title', t('app.name'));
     h2.id = 'tcx-modal-title';
-    const tag = el('span', 'tcx-modal__tag', t('app.tag'));
     heading.appendChild(icon);
     heading.appendChild(h2);
-    heading.appendChild(tag);
 
     const closeBtn = el('button', 'tcx-modal__close', '✕');
     closeBtn.type = 'button';
@@ -548,6 +549,18 @@ export class SettingsModal {
       this._toggleRow('settings.accountAge', 'accountAgeLookup')
     );
     body.appendChild(this._auditSection());
+    body.appendChild(this._toggleRow('settings.recordSession', 'recordSession'));
+    const exports = el('div', 'tcx-audit-btn-group');
+    ['settings.sessionDownload', 'settings.previousSessionDownload'].forEach((key, index) => {
+      const button = el('button', 'tcx-audit-btn', t(key));
+      button.type = 'button';
+      button.dataset.tcxI18n = key;
+      button.dataset.tcxSessionExport = String(index);
+      button.disabled = !this.sessionAvailability[index];
+      button.addEventListener('click', () => this.downloadSession(index === 1));
+      exports.appendChild(button);
+    });
+    body.appendChild(exports);
 
     // ---- interface
     body.appendChild(this._sectionLabel('settings.section.interface'));
@@ -607,10 +620,11 @@ export class SettingsModal {
       showBadges: true,
       muteSuspicious: false,
       hideSuspicious: false,
-      suspiciousThreshold: 25,
+      suspiciousThreshold: 30,
       clientR9K: false,
       r9kAction: 'mute',
       enableAuditLog: false,
+      recordSession: false,
       adjustViewerCounter: true,
       accountAgeLookup: false,
       showChatStats: true,

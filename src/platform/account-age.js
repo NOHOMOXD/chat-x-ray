@@ -8,8 +8,7 @@
  * setting is off.
  *
  * This is not an official Twitch API: the endpoint is undocumented and can
- * change or rate-limit. Every failure is silent and falls back to the local
- * user-id heuristic.
+ * change or rate-limit. An unavailable date leaves the account age unknown.
  */
 export const TWITCH_GQL_URL = 'https://gql.twitch.tv/gql';
 // Public "web" client id used by twitch.tv itself. No user token/cookies are
@@ -62,7 +61,7 @@ export class AccountAgeService {
     return Boolean(this.getSettings().accountAgeLookup);
   }
 
-  maybeLookup(login, botScore) {
+  maybeLookup(login, botScore, potentialPoints = 0) {
     if (!this.enabled) {
       return false;
     }
@@ -70,7 +69,8 @@ export class AccountAgeService {
     if (!key || key.length > 64) {
       return false;
     }
-    if (Number(botScore) < this.minScore) {
+    const threshold = Number(this.getSettings().suspiciousThreshold) || this.minScore;
+    if (Number(botScore) < this.minScore && Number(botScore) + potentialPoints < threshold) {
       return false;
     }
     if (this.queued.has(key) || this.inFlight.has(key)) {

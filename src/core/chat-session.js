@@ -5,7 +5,6 @@
  */
 export const DEFAULTS = Object.freeze({
   recentWindowMs: 10 * 60 * 1000,
-  suspiciousThreshold: 50,
   selfHistorySize: 5,
   maxUsers: 20000,
   userTtlMs: 6 * 60 * 60 * 1000,
@@ -121,24 +120,40 @@ export class ChatSession {
     }
   }
 
-  getStats(now, customThreshold) {
+  getStats(now, since = -Infinity) {
     this.prune(now);
 
     const activeUsers = new Set();
     const suspiciousUsers = new Set();
+    const serviceBots = new Set();
+    const minuteUsers = new Set();
+    let audienceMessages = 0;
+    let windowMessages = 0;
     const freshUsers = new Set();
     let minuteMessages = 0;
     let suspiciousMessages = 0;
-    const threshold = Number.isFinite(customThreshold)
-      ? customThreshold
-      : this.options.suspiciousThreshold;
+    // The analyzer injects its threshold through the constructor; that value
+    // is the single source of truth here.
+    const threshold = this.options.suspiciousThreshold;
 
     for (let i = 0; i < this.records.length; i += 1) {
       const record = this.records[i];
-      if (record.ts >= now - 60000) {
-        minuteMessages += 1;
+      // The socket boundary is local, while Twitch timestamps can precede it.
+      if (record.ts > now || record.ts < now - this.options.recentWindowMs ||
+          (record.receivedAt ?? record.ts) < since) {
+        continue;
       }
+      if (record.ts > now - 60000) {
+        minuteMessages += 1;
+        minuteUsers.add(record.userKey);
+      }
+      windowMessages += 1;
       activeUsers.add(record.userKey);
+      if (record.serviceBot) {
+        serviceBots.add(record.userKey);
+      } else {
+        audienceMessages += 1;
+      }
       if (record.freshAccount) {
         freshUsers.add(record.userKey);
       }
@@ -148,17 +163,19 @@ export class ChatSession {
       }
     }
 
-    const windowMessages = this.records.length;
     const suspiciousPercent = windowMessages
       ? Math.round((suspiciousMessages / windowMessages) * 100)
       : 0;
 
     const totalActive = activeUsers.size;
     const totalSuspicious = suspiciousUsers.size;
-    const cleanActive = Math.max(0, totalActive - totalSuspicious);
+    const cleanActive = Math.max(0, totalActive - totalSuspicious - serviceBots.size);
 
     return {
       messagesPerMinute: minuteMessages,
+      minuteUsers: minuteUsers.size,
+      serviceBots: serviceBots.size,
+      audienceMessages,
       activeUsers: totalActive,
       cleanUsers: cleanActive,
       suspiciousUsers: totalSuspicious,

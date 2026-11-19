@@ -438,7 +438,7 @@ export function hasNumericSuffixPattern(login) {
     return true;
   }
 
-  // Heavy digit density: 40%+ digits in a 7+ char username
+  // Heavy digit density: 45%+ digits in a 7+ char username
   if (clean.length >= 7) {
     const digits = (clean.match(/\d/g) || []).length;
     if (digits >= 4 && digits / clean.length >= 0.45) {

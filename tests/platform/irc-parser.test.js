@@ -142,3 +142,11 @@ describe('parseFrame', () => {
     expect(parseFrame(null, 1)).toEqual([]);
   });
 });
+
+it('extracts a raid from USERNOTICE with server time and the announced raid size', () => {
+  const frame = '@id=abc;msg-id=raid;msg-param-viewerCount=2;tmi-sent-ts=1234 :tmi.twitch.tv USERNOTICE #Example';
+  expect(parseFrame(frame, 1500)).toEqual([
+    { kind: 'raid', channel: 'example', id: 'abc', ts: 1234, viewers: 2 },
+  ]);
+  expect(parseFrame(frame.replace('msg-id=raid', 'msg-id=sub'), 1500)).toEqual([]);
+});

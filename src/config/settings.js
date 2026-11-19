@@ -18,7 +18,7 @@ import {
 export const STORAGE_KEY = 'tcxSettings';
 
 /** Default bot-score threshold, in percent. */
-export const DEFAULT_THRESHOLD = 25;
+export const DEFAULT_THRESHOLD = 30;
 
 export const DEFAULTS = Object.freeze({
   showBadges: true,
@@ -28,6 +28,7 @@ export const DEFAULTS = Object.freeze({
   clientR9K: false,
   r9kAction: 'mute',
   enableAuditLog: false,
+  recordSession: false,
   adjustViewerCounter: true,
   accountAgeLookup: false,
   showChatStats: true,
@@ -54,6 +55,7 @@ export function normalizeSettings(raw) {
     clientR9K: source.clientR9K === true,
     r9kAction: source.r9kAction === 'hide' ? 'hide' : 'mute',
     enableAuditLog: source.enableAuditLog === true,
+    recordSession: source.recordSession === true,
     adjustViewerCounter: source.adjustViewerCounter !== false,
     accountAgeLookup: source.accountAgeLookup === true,
     showChatStats: source.showChatStats !== false,

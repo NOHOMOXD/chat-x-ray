@@ -32,7 +32,7 @@ export const VIEWER_ESTIMATE_DEFAULTS = Object.freeze({
   // extrapolated audience is visibly smaller than the official number.
   erSoftPercent: 6,
   erAlertMinViewers: 1000,
-  erAlertMinSessionMs: 5 * 60 * 1000,
+  erAlertMinSessionMs: 10 * 60 * 1000,
 });
 
 export function roundViewerBound(value) {
@@ -70,7 +70,7 @@ export function estimateViewerRange(officialViewers, stats, options) {
 
   const cleanChatters = Math.max(0, Number(stats.cleanUsers) || 0);
   const activeUsers = Math.max(0, Number(stats.activeUsers) || 0);
-  const windowMessages = Math.max(0, Number(stats.windowMessages) || 0);
+  const windowMessages = Math.max(0, Number(stats.audienceMessages ?? stats.windowMessages) || 0);
   const rawSessionMs = Math.max(0, Number(stats.sessionMs) || 0);
   const sessionMs = Math.min(settings.referenceWindowMs, rawSessionMs);
 
@@ -138,7 +138,7 @@ export function estimateViewerRange(officialViewers, stats, options) {
 /**
  * Chat engagement rate (ER): clean unique chatters / official viewers.
  * It is only meaningful after the chat had time to accumulate, hence the
- * `measurable` gate; before 5 minutes the rate is shown as provisional.
+ * `measurable` gate; before 10 minutes the rate is shown as provisional.
  */
 export function getChatEngagement(officialViewers, stats, options) {
   const settings = Object.assign({}, VIEWER_ESTIMATE_DEFAULTS, options || {});
@@ -185,7 +185,7 @@ export function getLoadingProgress(stats, options) {
   const source = stats || {};
   const sessionMs = Math.max(0, Number(source.sessionMs) || 0);
   const chatters = Math.max(0, Number(source.cleanUsers) || 0);
-  const messages = Math.max(0, Number(source.windowMessages) || 0);
+  const messages = Math.max(0, Number(source.audienceMessages ?? source.windowMessages) || 0);
   const isBotWave = Boolean(source.isBotWave);
 
   // A bot wave is an alarm, not a completeness requirement: it gets a 0-weight
@@ -270,7 +270,7 @@ export function classifyViewerSignals(input) {
       labelKey: 'verdict.low-er-and-churn',
     };
   }
-  if (churn && churn.churnActive) {
+  if (churn && (churn.churnActive || churn.churnRecent > 0)) {
     return {
       level: 'warn',
       key: 'churn',
@@ -305,7 +305,7 @@ export function classifyViewerSignals(input) {
       labelKey: 'verdict.chat-bots',
     };
   }
-  if (!range) {
+  if (!range || engagement?.measurable === false) {
     return {
       level: 'unknown',
       key: 'no-data',
@@ -368,12 +368,15 @@ export function buildViewerModel(input) {
             : history.churnEvents || 0,
         churnActive: Boolean(history.churnActive),
         lastEvent: history.lastEvent || null,
+        lastAnomaly: history.lastAnomaly || null,
+        totalSurges: history.totalSurges || 0,
+        totalOutflows: history.totalOutflows,
+        lastOutflow: history.lastOutflow,
+        lastSurge: history.lastSurge,
+        averageSurge: history.averageSurge || 0,
         maxDrop: Number(history.maxDrop) || 0,
         totalMaxDrop: Number(history.totalMaxDrop) || Number(history.maxDrop) || 0,
         averageDrop: Number(history.averageDrop) || 0,
-        dropSamples: Array.isArray(history.dropSamples)
-          ? history.dropSamples.slice()
-          : [],
         pendingDrop: history.pendingDrop || null,
         volatility: Number(history.volatility) || 0,
         span: Number(history.span) || 0,
@@ -393,6 +396,7 @@ export function buildViewerModel(input) {
   return {
     official,
     stableOfficial,
+    minute: input.minute || null,
     range,
     engagement,
     churn,

@@ -109,7 +109,6 @@ export function pluralForm(locale, count) {
 export const MESSAGES = Object.freeze({
   ru: {
     'app.name': 'Chat X-Ray',
-    'app.tag': 'ЛОКАЛЬНО',
     'app.lead':
       'Локальный рентген чата Twitch: бейджи ботов, клиентский R9K, аудит и оценка живого онлайна.',
     'app.settings': 'Настройки',
@@ -149,6 +148,58 @@ export const MESSAGES = Object.freeze({
       'Порог действий: {threshold}% · R9K {state}',
     'tip.badge.wave': 'Волна ботов: аккаунт попал в аномальный всплеск чата.',
 
+    'tip.details': 'Подробнее',
+    'tip.eventTime': 'Время события',
+    'tip.onlineTransition': 'Было → стало',
+    'tip.observationLabel': 'Наблюдаем',
+    'tip.lastMeasurementLabel': 'Последний замер',
+    'tip.chatAlertLabel': 'Предупреждение чата',
+    'tip.chatAlertValue': '{suspicious} из {active} авторов с баллом ≥ {threshold}',
+    'tip.gathering': 'Собираем данные · {percent}%',
+    'tip.missing.duration': 'Нужно {required} мин наблюдения',
+    'tip.missing.chatters': 'Чистых авторов {value} из {required}',
+    'tip.missing.messages': 'Сообщений аудитории {value} из {required}',
+    'tip.estimate': 'Оценка по чату',
+    'tip.provisional': 'Предварительно',
+    'tip.estimateNote': 'Расчёт предполагает, что за 10 минут пишут 8–12,5% живой аудитории.',
+    'tip.seconds': '{count} с',
+    'tip.minutes': '{minutes} мин',
+    'tip.hoursMinutes': '{hours} ч {minutes} мин',
+    'tip.observing': 'Наблюдаем {duration}',
+    'tip.covered': 'собрано {minutes} из 10 мин',
+    'tip.sliding': 'чат за последние 10 мин',
+    'tip.lastMeasurement': 'Последний замер · {time}',
+    'tip.medianLabel': 'Медиана онлайна',
+    'tip.lastChurn': 'Последний откат',
+    'tip.lastSurge': 'Последний наплыв',
+    'tip.precedingDrop': 'Перед ростом · {values} · {time}',
+    'tip.surges': 'Наплывы за сессию',
+    'tip.outflows': 'Оттоки за сессию',
+    'tip.lastOutflow': 'Последний отток',
+    'tip.noEventData': 'Нет данных',
+    'tip.outflow.observing': 'Ожидаем восстановления',
+    'tip.outflow.recovered': 'Восстановился в {time}',
+    'tip.outflow.unrecovered': 'За 5 мин не восстановился',
+    'tip.outflow.interrupted': 'Наблюдение прервано',
+    'tip.badge.ageUnknown': 'Возраст неизвестен',
+    'tip.idGroups': 'Плотные группы ID',
+    'tip.idGroupCounts': '{groups} групп · {authors} авторов',
+    'tip.idGroup': 'Группа ID · {count} авт. · {from}–{to}',
+    'tip.churns': 'Откаты',
+    'tip.eventAverage': '{count} · в среднем {average}',
+    'tip.chatThreshold': 'Чат · {suspicious} из {active} авторов с баллом ≥ {threshold}',
+    'tip.suspiciousAuthors': 'Подозрительных авторов',
+    'tip.lastWave': 'Последняя волна · {time} · авторов {count}',
+    'tip.waveCount': 'Волн за сессию',
+    'tip.status.waiting': 'Идёт сбор данных',
+    'tip.status.disconnected': 'Соединение с чатом прервано',
+    'tip.status.ok': 'Без текущих предупреждений',
+    'tip.status.stale': 'Текущий онлайн недоступен',
+    'tip.status.surge': 'Недавний наплыв зрителей',
+    'tip.status.churn': 'Недавний откат онлайна',
+    'tip.status.lowEr': 'Низкая вовлечённость по отношению к онлайну',
+    'tip.status.wave': 'Обнаружена волна в чате',
+    'tip.status.suspicious': 'Высокая доля подозрительных авторов',
     'tip.viewer.title': 'Оценка зрителей',
     'tip.viewer.official': 'Официально Twitch: {value}',
     'tip.viewer.median': 'медиана {value}',
@@ -190,7 +241,7 @@ export const MESSAGES = Object.freeze({
 
     'verdict.low-er-and-churn':
       'высокий риск: низкая вовлечённость + скачки онлайна',
-    'verdict.churn': 'скачки онлайна: похоже на ротацию ботов',
+    'verdict.churn': 'подтверждённый откат онлайна',
     'verdict.low-er': 'низкая вовлечённость: возможна накрутка на потоке',
     'verdict.below-organic-er': 'вовлечённость ниже органического диапазона',
     'verdict.bot-wave': 'волна ботов в чате',
@@ -205,7 +256,7 @@ export const MESSAGES = Object.freeze({
     'stats.active': 'активных в чате',
     'stats.activeLabel': 'Активных чаттеров',
     'stats.activeValue': '{value} ({clean} чистых)',
-    'stats.suspicious': 'подозрительных',
+    'stats.suspicious': 'подозрительных сообщ.',
     'stats.suspiciousLabel': 'Подозрительных сообщений',
     'stats.window': 'Сообщений в окне',
     'stats.windowValue': '{value} / 10 мин',
@@ -230,6 +281,7 @@ export const MESSAGES = Object.freeze({
     'trigger.auto.char-flood': 'Флуд символами',
     'trigger.clusterSuffix': ' ×{count}',
     'trigger.freshAccount': 'Новый аккаунт ({days} дн.)',
+    'trigger.auto.veteran-account': 'Старый аккаунт ({days} дн.)',
     'trigger.freshAccountId': 'Новый пустой аккаунт (ID > 1.45 млрд)',
     'trigger.wave': 'Волна ботов',
 
@@ -242,7 +294,7 @@ export const MESSAGES = Object.freeze({
     'settings.thresholdAria':
       'Порог срабатывания подозрительности botScore от 10% до 100%',
     'settings.thresholdHelp':
-      '10–30% — чувствительно, 25% — по умолчанию, 50% — сбалансировано, 70–100% — только строгие боты.',
+      '10–30% — чувствительно, 30% — по умолчанию, 50% — сбалансировано, 70–100% — только строгие боты.',
     'settings.section.r9k': 'R9K',
     'settings.r9k': 'Клиентский R9K (пасты и дубликаты)',
     'settings.r9kAction': 'Действие R9K',
@@ -263,6 +315,18 @@ export const MESSAGES = Object.freeze({
     'settings.languageRu': 'Русский',
     'settings.languageEn': 'English',
     'settings.auditCount': 'Зафиксировано ботов: ',
+    'settings.recordSession': 'Записывать статистику сессии',
+    'settings.sessionDownload': 'Скачать снимок сессии',
+    'settings.previousSessionDownload': 'Скачать предыдущую сессию',
+    'tip.viewer.anomalies': 'Крупные изменения счётчика Twitch',
+    'tip.viewer.anomalyTotals': 'Наплывы {surges} (ср. +{rises}) · откаты {churn} (ср. −{drops})',
+    'tip.viewer.lastAnomaly': 'Последний скачок',
+    'tip.viewer.lastAnomalyValue': '{from} → {to} ({delta})',
+    'tip.viewer.minute': 'Чат за минуту',
+    'tip.viewer.minuteChat': 'Авторов {authors} · сообщений {messages}',
+    'tip.viewer.minuteViewers': 'Онлайн за минуту',
+    'tip.viewer.completeWindow': 'Полное окно 10 минут',
+    'tip.viewer.partialWindow': 'Наблюдаем {minutes} из 10 минут',
     'settings.copyJson': 'Копировать JSON',
     'settings.copied': '✔ Скопировано!',
     'settings.download': 'Скачать .json',
@@ -280,7 +344,7 @@ export const MESSAGES = Object.freeze({
     'options.auditHelp':
       'Журнал хранится в памяти вкладки. Копирование и скачивание доступны в панели настроек Chat X-Ray на странице стрима.',
     'options.accountAgeHelp':
-      'При включении расширение запрашивает createdAt у gql.twitch.tv только для подозрительных аккаунтов и кэширует ответы в памяти вкладки. Это неофициальный endpoint.',
+      'При включении расширение запрашивает createdAt у gql.twitch.tv для подозрительных аккаунтов и тех, кто может пересечь порог после проверки возраста. Расширение кэширует ответы в памяти вкладки. Это неофициальный endpoint.',
     'options.hint':
       'Анализ в памяти вкладки; сеть — только при включённом GQL-возрасте. Те же настройки доступны в панели Chat X-Ray на странице стрима.',
     'options.cardR9k.title': 'Адаптивный R9K',
@@ -299,7 +363,6 @@ export const MESSAGES = Object.freeze({
 
   en: {
     'app.name': 'Chat X-Ray',
-    'app.tag': 'LOCAL',
     'app.lead':
       'A local Twitch chat X-ray: bot badges, client-side R9K, audit log and a live-viewer estimate.',
     'app.settings': 'Settings',
@@ -338,6 +401,58 @@ export const MESSAGES = Object.freeze({
     'tip.badge.footer': 'Action threshold: {threshold}% · R9K {state}',
     'tip.badge.wave': 'Bot wave: this account landed in an abnormal chat spike.',
 
+    'tip.details': 'Details',
+    'tip.eventTime': 'Event time',
+    'tip.onlineTransition': 'Before → after',
+    'tip.observationLabel': 'Observing for',
+    'tip.lastMeasurementLabel': 'Last measurement',
+    'tip.chatAlertLabel': 'Chat alert',
+    'tip.chatAlertValue': '{suspicious} of {active} authors scored ≥ {threshold}',
+    'tip.gathering': 'Collecting data · {percent}%',
+    'tip.missing.duration': 'Requires {required} min of observation',
+    'tip.missing.chatters': 'Clean authors {value} of {required}',
+    'tip.missing.messages': 'Audience messages {value} of {required}',
+    'tip.estimate': 'Estimate from chat',
+    'tip.provisional': 'Provisional',
+    'tip.estimateNote': 'The estimate assumes 8–12.5% of live viewers write in chat over 10 minutes.',
+    'tip.seconds': '{count} s',
+    'tip.minutes': '{minutes} min',
+    'tip.hoursMinutes': '{hours} h {minutes} min',
+    'tip.observing': 'Observing for {duration}',
+    'tip.covered': '{minutes} of 10 min collected',
+    'tip.sliding': 'chat over the last 10 min',
+    'tip.lastMeasurement': 'Last measurement · {time}',
+    'tip.medianLabel': 'Median viewer count',
+    'tip.lastChurn': 'Last drop and recovery',
+    'tip.lastSurge': 'Last surge',
+    'tip.precedingDrop': 'Before the rise · {values} · {time}',
+    'tip.surges': 'Surges this session',
+    'tip.outflows': 'Drops this session',
+    'tip.lastOutflow': 'Latest drop',
+    'tip.noEventData': 'No data',
+    'tip.outflow.observing': 'Watching for recovery',
+    'tip.outflow.recovered': 'Recovered at {time}',
+    'tip.outflow.unrecovered': 'Did not recover within 5 min',
+    'tip.outflow.interrupted': 'Observation interrupted',
+    'tip.badge.ageUnknown': 'Account age unknown',
+    'tip.idGroups': 'Dense ID groups',
+    'tip.idGroupCounts': '{groups} groups · {authors} authors',
+    'tip.idGroup': 'ID group · {count} authors · {from}–{to}',
+    'tip.churns': 'Drops and recoveries',
+    'tip.eventAverage': '{count} · average {average}',
+    'tip.chatThreshold': 'Chat · {suspicious} of {active} authors scored ≥ {threshold}',
+    'tip.suspiciousAuthors': 'Suspicious authors',
+    'tip.lastWave': 'Last wave · {time} · {count} authors',
+    'tip.waveCount': 'Waves this session',
+    'tip.status.waiting': 'Collecting data',
+    'tip.status.disconnected': 'Chat connection interrupted',
+    'tip.status.ok': 'No current alerts',
+    'tip.status.stale': 'Current viewer count unavailable',
+    'tip.status.surge': 'Recent surge in viewer count',
+    'tip.status.churn': 'Recent drop and recovery',
+    'tip.status.lowEr': 'Low chat engagement relative to viewer count',
+    'tip.status.wave': 'Chat wave detected',
+    'tip.status.suspicious': 'High share of suspicious authors',
     'tip.viewer.title': 'Viewer estimate',
     'tip.viewer.official': 'Official Twitch: {value}',
     'tip.viewer.median': 'median {value}',
@@ -379,7 +494,7 @@ export const MESSAGES = Object.freeze({
 
     'verdict.low-er-and-churn':
       'high risk: low engagement + viewer swings',
-    'verdict.churn': 'viewer swings: looks like bot rotation',
+    'verdict.churn': 'confirmed viewer count rollback',
     'verdict.low-er': 'low engagement: possible view inflation',
     'verdict.below-organic-er': 'engagement below the organic band',
     'verdict.bot-wave': 'bot wave in chat',
@@ -394,7 +509,7 @@ export const MESSAGES = Object.freeze({
     'stats.active': 'active in chat',
     'stats.activeLabel': 'Active chatters',
     'stats.activeValue': '{value} ({clean} clean)',
-    'stats.suspicious': 'suspicious',
+    'stats.suspicious': 'suspicious msgs',
     'stats.suspiciousLabel': 'Suspicious messages',
     'stats.window': 'Messages in window',
     'stats.windowValue': '{value} / 10 min',
@@ -418,6 +533,7 @@ export const MESSAGES = Object.freeze({
     'trigger.auto.char-flood': 'Character flood',
     'trigger.clusterSuffix': ' ×{count}',
     'trigger.freshAccount': 'New account ({days} days)',
+    'trigger.auto.veteran-account': 'Established account ({days} days)',
     'trigger.freshAccountId': 'New empty account (ID > 1.45B)',
     'trigger.wave': 'Bot wave',
 
@@ -430,7 +546,7 @@ export const MESSAGES = Object.freeze({
     'settings.thresholdAria':
       'Bot score action threshold from 10% to 100%',
     'settings.thresholdHelp':
-      '10–30% is sensitive, 25% is the default, 50% is balanced, 70–100% catches only strict bots.',
+      '10–30% is sensitive, 30% is the default, 50% is balanced, 70–100% catches only strict bots.',
     'settings.section.r9k': 'R9K',
     'settings.r9k': 'Client-side R9K (pastes & duplicates)',
     'settings.r9kAction': 'R9K action',
@@ -451,6 +567,18 @@ export const MESSAGES = Object.freeze({
     'settings.languageRu': 'Русский',
     'settings.languageEn': 'English',
     'settings.auditCount': 'Bots logged: ',
+    'settings.recordSession': 'Record session statistics',
+    'settings.sessionDownload': 'Download session snapshot',
+    'settings.previousSessionDownload': 'Download previous session',
+    'tip.viewer.anomalies': 'Large changes in the Twitch count',
+    'tip.viewer.anomalyTotals': 'Surges {surges} (avg +{rises}) · rollbacks {churn} (avg −{drops})',
+    'tip.viewer.lastAnomaly': 'Latest swing',
+    'tip.viewer.lastAnomalyValue': '{from} → {to} ({delta})',
+    'tip.viewer.minute': 'Chat in the last minute',
+    'tip.viewer.minuteChat': 'Authors {authors} · messages {messages}',
+    'tip.viewer.minuteViewers': 'Viewers in the last minute',
+    'tip.viewer.completeWindow': 'Full 10-minute window',
+    'tip.viewer.partialWindow': 'Observed {minutes} of 10 minutes',
     'settings.copyJson': 'Copy JSON',
     'settings.copied': '✔ Copied!',
     'settings.download': 'Download .json',
@@ -468,7 +596,7 @@ export const MESSAGES = Object.freeze({
     'options.auditHelp':
       'The log lives in the tab memory. Copy and download buttons are available in the Chat X-Ray panel on the stream page.',
     'options.accountAgeHelp':
-      'When enabled, the extension asks gql.twitch.tv for createdAt of suspicious accounts only and caches answers in tab memory. This is an unofficial endpoint.',
+      'When enabled, the extension asks gql.twitch.tv for createdAt of suspicious accounts and accounts that could reach the threshold after the age check. It caches answers in tab memory. This is an unofficial endpoint.',
     'options.hint':
       'Analysis lives in the tab; network only with GQL age lookup. The same settings are available in the Chat X-Ray panel on the stream page.',
     'options.cardR9k.title': 'Adaptive R9K',
@@ -513,11 +641,6 @@ export function setLocale(locale) {
   return changed;
 }
 
-export function hasMessage(key, locale) {
-  const table = templateCache(normalizeLocale(locale) || currentLocale);
-  return Object.prototype.hasOwnProperty.call(table, key);
-}
-
 /**
  * Translate a key with optional {placeholder} params. Unknown keys return the
  * key itself so a missing string is visible in development instead of
@@ -534,12 +657,6 @@ export function t(key, params, locale) {
     return String(key);
   }
   return interpolate(template, params);
-}
-
-/** Convenience: create a bound translator for one locale (defaults to current). */
-export function createTranslator(locale) {
-  const resolved = resolveLocale(locale);
-  return (key, params) => t(key, params, resolved);
 }
 
 /** Format a locale-aware number for display. */

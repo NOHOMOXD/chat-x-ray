@@ -27,10 +27,10 @@ function fakeStorage(initial, { delay = 0 } = {}) {
 }
 
 describe('defaults', () => {
-  it('ship a 25% threshold and a visible stats strip', () => {
+  it('ship a 30% threshold and a visible stats strip', () => {
     const defaults = normalizeSettings(DEFAULTS);
-    expect(defaults.suspiciousThreshold).toBe(25);
-    expect(DEFAULT_THRESHOLD).toBe(25);
+    expect(defaults.suspiciousThreshold).toBe(30);
+    expect(DEFAULT_THRESHOLD).toBe(30);
     expect(defaults.showChatStats).toBe(true);
     expect(defaults.showBadges).toBe(true);
     expect(defaults.adjustViewerCounter).toBe(true);
@@ -44,8 +44,8 @@ describe('clampThreshold', () => {
     expect(clampThreshold(73)).toBe(75);
     expect(clampThreshold(14)).toBe(15);
     expect(clampThreshold(120)).toBe(100);
-    expect(clampThreshold('abc')).toBe(25);
-    expect(clampThreshold(undefined)).toBe(25);
+    expect(clampThreshold('abc')).toBe(30);
+    expect(clampThreshold(undefined)).toBe(30);
   });
 });
 

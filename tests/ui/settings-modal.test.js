@@ -107,6 +107,8 @@ describe('settings row inside Twitch chat settings', () => {
     expect(row.getAttribute('aria-controls')).toBe(MODAL_ID);
     expect(row.textContent).toContain('Chat X-Ray Settings');
     expect(popover.lastElementChild).toBe(row);
+    // The old trailing chevron is gone.
+    expect(row.querySelector('svg')).toBe(null);
 
     // Idempotent.
     harness.modal.ensureMenuRow();
@@ -114,6 +116,41 @@ describe('settings row inside Twitch chat settings', () => {
 
     harness.modal.stop();
     expect(document.getElementById(MENU_ROW_ID)).toBe(null);
+  });
+
+  it('never nests inside a third-party group', () => {
+    // BetterTTV and 7TV both append their own group to the same container.
+    document.body.innerHTML =
+      '<button data-a-target="chat-settings"></button>' +
+      '<div class="chat-settings-menu">' +
+      '<div class="row"><button>Chat Filters</button></div>' +
+      '<div class="row"><button>Hide Chat</button></div>' +
+      '<div class="bttv-chat-settings"><button>BetterTTV Settings</button></div>' +
+      '<div class="seventv-settings"><button>7TV Settings</button></div>' +
+      '</div>';
+
+    const popover = document.querySelector('.chat-settings-menu');
+    popover.getBoundingClientRect = () => ({
+      width: 320,
+      height: 400,
+      top: 0,
+      left: 0,
+      right: 320,
+      bottom: 400,
+    });
+    for (const row of popover.querySelectorAll('button')) {
+      row.getClientRects = () => [{ width: 320, height: 40 }];
+    }
+
+    const harness = makeModal();
+    harness.modal.start();
+    const row = harness.modal.ensureMenuRow();
+
+    // Our row is the last child of the container itself, never a descendant
+    // of a foreign group: that is what keeps it visually separate.
+    expect(row.parentElement).toBe(popover);
+    expect(row.closest('.bttv-chat-settings')).toBe(null);
+    expect(row.closest('.seventv-settings')).toBe(null);
   });
 
   it('opens the modal and stops the click from reaching Twitch', () => {
@@ -186,11 +223,11 @@ describe('modal fields', () => {
     }
   });
 
-  it('starts the threshold slider at 25%', () => {
+  it('starts the threshold slider at 30%', () => {
     const harness = makeModal();
     harness.modal.openModal();
     const range = document.querySelector('[data-tcx-setting="suspiciousThreshold"]');
-    expect(range.value).toBe('25');
+    expect(range.value).toBe('30');
     expect(range.min).toBe('10');
     expect(range.max).toBe('100');
   });
@@ -243,7 +280,7 @@ describe('modal fields', () => {
     harness.modal.openModal();
     document.querySelector('[data-tcx-i18n="app.reset"]').click();
 
-    expect(harness.settings.suspiciousThreshold).toBe(25);
+    expect(harness.settings.suspiciousThreshold).toBe(30);
     expect(harness.settings.showBadges).toBe(true);
     expect(harness.settings.clientR9K).toBe(false);
     expect(harness.settings.language).toBe('');

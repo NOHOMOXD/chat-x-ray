@@ -92,8 +92,9 @@ export class MessageRow {
     this.row.dataset.tcxR9k = this.record.isR9KDuplicate ? '1' : '0';
     this.row.dataset.tcxWave = isWaveRecord(this.record) ? '1' : '0';
 
-    if (settings.showBadges && this.record.botScore >= threshold) {
-      this._ensureBadge(threshold);
+    const idGroup = settings.getIdGroup?.(this.record.numericUserId);
+    if (settings.showBadges && (this.record.botScore >= threshold || idGroup)) {
+      this._ensureBadge(threshold, idGroup);
     } else {
       this._removeBadge();
     }
@@ -120,7 +121,7 @@ export class MessageRow {
     }
   }
 
-  _ensureBadge(threshold) {
+  _ensureBadge(threshold, idGroup) {
     let badge = this.row.querySelector('.tcx-bot-badge');
     if (!badge) {
       badge = document.createElement('span');
@@ -146,11 +147,13 @@ export class MessageRow {
     const minThreshold = Number.isFinite(threshold) ? threshold : 50;
     const hue = botHue(score, minThreshold);
     const wave = isWaveRecord(this.record);
+    const groupOnly = score < threshold;
 
-    setTextIfChanged(badge, `BOT ${score}%`);
+    setTextIfChanged(badge, groupOnly ? 'ID' : `BOT ${score}%`);
+    badge.classList.toggle('tcx-bot-badge--id-group', groupOnly);
     badge.dataset.tcxScore = String(score);
     badge.style.setProperty('--tcx-bot-hue', String(hue));
-    badge.classList.toggle('tcx-bot-badge--wave', wave);
+    badge.classList.toggle('tcx-bot-badge--wave', wave && !groupOnly);
 
     const triggers = (this.record.triggers || [])
       .filter((tr) => tr && (tr.labelKey || tr.label))
@@ -159,7 +162,7 @@ export class MessageRow {
 
     badge.setAttribute(
       'aria-label',
-      t('tip.badge.scoreAria', {
+      groupOnly ? t('tip.idGroups') : t('tip.badge.scoreAria', {
         score,
         triggers: triggers || t('tip.badge.noTriggers'),
       })
@@ -175,6 +178,8 @@ export class MessageRow {
           isR9KDuplicate: this.record.isR9KDuplicate,
           spamFlood: this.record.spamFlood,
           accountAgeDays: this.record.accountAgeDays,
+          idGroup: this.settings.getIdGroup?.(this.record.numericUserId),
+          groupOnly: this.record.botScore < this.settings.suspiciousThreshold,
           r9kSimilarity: this.record.r9kSimilarity,
           roleExempt: this.record.roleExempt,
           clientR9K: this.settings.clientR9K,

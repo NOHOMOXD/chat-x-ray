@@ -41,9 +41,9 @@ Chrome both require Developer mode, which non-technical users will not do.
    `updates.json`. Users install once via *about:addons → Install Add-on From
    File*.
 
-`gecko.id` is permanent — it is already fixed to `chat-x-ray@local` in
-`build.js`. Change it now if you want a domain-shaped id, before the first
-public release.
+`gecko.id` is permanent — it is already fixed to `chat-x-ray@nohomoxd.github.io`
+in `build.js` (`GECKO_ID` overrides it). Change it now if you want a different
+id, before the first public release.
 
 ## Releases via GitHub Actions
 

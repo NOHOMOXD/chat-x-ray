@@ -54,7 +54,7 @@ Open Twitch's own **Chat Settings** (the gear under chat). A **"Chat X-Ray
 Settings"** row sits at the bottom, like BetterTTV's. There is also a gear button
 in the chat header.
 
-Everything is there: badge visibility, threshold (default **25%**), muting or
+Everything is there: badge visibility, threshold (default **30%**), muting or
 hiding, client-side R9K, the stats strip, the viewer counter, the audit log,
 the opt-in account-age lookup, and the interface language.
 

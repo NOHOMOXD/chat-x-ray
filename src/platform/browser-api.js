@@ -21,12 +21,6 @@ function apiGlobal() {
   return globalScope.chrome || null;
 }
 
-/** True when running inside a real extension (either engine). */
-export function hasExtensionApi() {
-  const api = apiGlobal();
-  return Boolean(api && api.storage && api.storage.local);
-}
-
 /**
  * The storage area, or null when unavailable (unit tests, plain pages).
  * Tests inject their own area into SettingsRepository instead.

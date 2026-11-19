@@ -34,7 +34,7 @@ const wants = {
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 
 /** Firefox refuses to install an MV3 add-on without a stable gecko id. */
-const GECKO_ID = 'chat-x-ray@local';
+const GECKO_ID = process.env.GECKO_ID || 'chat-x-ray@nohomoxd.github.io';
 
 const ENTRY_POINTS = [
   { in: path.join(SRC, 'platform/inject.js'), out: 'inject' },
@@ -98,9 +98,14 @@ function writeManifest(outDir, target) {
         id: GECKO_ID,
         // 128 is the first release with content_scripts.world: "MAIN", but
         // data_collection_permissions (mandatory on AMO since 2025-11-03)
-        // only exists from 140, so 140 is the real floor.
+        // only exists from 140, so 140 is the desktop floor.
         strict_min_version: '140.0',
         data_collection_permissions: { required: ['none'] },
+      },
+      // Android only understands data_collection_permissions from 142, so it
+      // needs its own floor; inheriting the desktop one trips web-ext lint.
+      gecko_android: {
+        strict_min_version: '142.0',
       },
     };
   }
@@ -166,6 +171,21 @@ async function main() {
     if (wants.firefox) {
       zipDir(path.join(DIST, 'firefox'), path.join(RELEASE, `${base}-firefox.zip`));
     }
+    // AMO reviewers need the sources for the minified bundle. `git archive HEAD`
+    // is the reproducible choice, but it must actually contain what a reviewer
+    // needs to rebuild: a lockfile. Failing loudly beats shipping a zip that
+    // silently gets the submission rejected.
+    const sourceZip = path.join(RELEASE, `${base}-source.zip`);
+    const sourceFiles = execFileSync('git', ['ls-tree', '-r', '--name-only', 'HEAD'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    }).split('\n');
+    if (!sourceFiles.includes('package-lock.json')) {
+      throw new Error('package-lock.json is not committed: commit it before packaging.');
+    }
+    fs.rmSync(sourceZip, { force: true });
+    execFileSync('git', ['archive', '--format=zip', '-o', sourceZip, 'HEAD'], { cwd: ROOT });
+    console.log(`[package] ${path.relative(ROOT, sourceZip)}`);
   }
 }
 

@@ -217,6 +217,8 @@ export function parsePrivmsg(line, fallbackTimestamp) {
     firstMsg: tags['first-msg'] === '1',
     firstMsgRaw: tags['first-msg'] || '0',
     ts,
+    receivedAt: Number.isFinite(fallbackTimestamp) ? fallbackTimestamp : Date.now(),
+    serverTimestamp: Number.isFinite(serverTimestamp) && serverTimestamp > 0,
     text: text.slice(0, MAX_TEXT_LENGTH),
     channel: channelParam.slice(1).toLowerCase(),
     roomId: tags['room-id'] || '',
@@ -235,11 +237,31 @@ export function parseFrame(rawFrame, fallbackTimestamp) {
   const messages = [];
 
   for (let i = 0; i < lines.length; i += 1) {
-    const message = parsePrivmsg(lines[i], now);
+    const message = parsePrivmsg(lines[i], now) || parseRaid(lines[i], now);
     if (message) {
       messages.push(message);
     }
   }
 
   return messages;
+}
+
+function parseRaid(line, now) {
+  if (!line.includes(' USERNOTICE ')) {
+    return null;
+  }
+  const { command, params, tags } = parseIrcLine(line) || {};
+  if (command !== 'USERNOTICE' || tags['msg-id'] !== 'raid' ||
+      !/^#[a-z0-9_]+$/i.test(params[0] || '')) {
+    return null;
+  }
+  const serverTs = Number(tags['tmi-sent-ts']);
+  const viewers = Number(tags['msg-param-viewerCount']);
+  return {
+    kind: 'raid',
+    channel: params[0].slice(1).toLowerCase(),
+    id: tags.id || line,
+    ts: serverTs > 0 ? serverTs : now,
+    viewers: Number.isSafeInteger(viewers) && viewers > 0 ? viewers : null,
+  };
 }
