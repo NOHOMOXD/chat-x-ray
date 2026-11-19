@@ -11,21 +11,32 @@ permissions:
 
 jobs:
   test:
+    strategy:
+      matrix:
+        include:
+          - project: chrome
+            browser: chromium
+            build: build
+          - project: firefox
+            browser: firefox
+            build: build:firefox
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --prefer-offline --no-audit
       - name: Unit, DOM and localization tests
+        if: matrix.project == 'chrome'
         run: npm test
       - name: Build browser targets
-        run: npm run build:all
+        run: npm run ${{ matrix.build }}
       - name: Lint Firefox
+        if: matrix.project == 'firefox'
         run: npm run lint:firefox
-      - name: Install Playwright Chromium and Firefox
-        run: npx playwright install --with-deps chromium firefox
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps ${{ matrix.browser }}
       - name: Extension E2E
-        run: npm run test:e2e
+        run: npm run test:e2e -- --project=${{ matrix.project }}

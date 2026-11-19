@@ -13,13 +13,12 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   browser-packages:
-    needs: verify
     runs-on: ubuntu-latest
     outputs:
       title: ${{ steps.version.outputs.title }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -41,7 +40,7 @@ jobs:
           }
           fs.appendFileSync(process.env.GITHUB_OUTPUT, 'title=Chat X-Ray ' + version.replace(/\.0$/, '') + '\n');
           JS
-      - run: npm ci
+      - run: npm ci --prefer-offline --no-audit
       - name: Package Chrome, Opera, Firefox and source
         run: npm run package
       - name: Rebuild the source archive in a clean directory
@@ -49,8 +48,9 @@ jobs:
           source_dir="$(mktemp -d)"
           unzip -q release/*-source.zip -d "$source_dir"
           cd "$source_dir"
-          npm ci
-          npm run build:all
+          npm ci --prefer-offline --no-audit
+          npm run build
+          npm run build:firefox
       - name: Sign Firefox when AMO credentials are configured
         if: github.event_name == 'push'
         continue-on-error: true
@@ -67,7 +67,7 @@ jobs:
             --artifacts-dir release \
             --channel=unlisted \
             --approval-timeout=600000
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: browser-packages
           path: |
@@ -75,37 +75,15 @@ jobs:
             release/*.xpi
           if-no-files-found: error
 
-  safari-package:
-    needs: verify
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: xcodebuild -version
-      - run: npm run package:safari
-      - uses: actions/upload-artifact@v4
-        with:
-          name: safari-package
-          path: release/*-safari-macos-project.zip
-          if-no-files-found: error
-
   assemble-release:
-    needs: [browser-packages, safari-package]
+    needs: [verify, browser-packages]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: browser-packages
-          path: release
-      - uses: actions/download-artifact@v4
-        with:
-          name: safari-package
           path: release
       - name: Write and verify checksums
         working-directory: release
@@ -115,7 +93,7 @@ jobs:
           sha256sum --check SHA256SUMS.txt
       - name: Upload release rehearsal
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-rehearsal
           path: release/

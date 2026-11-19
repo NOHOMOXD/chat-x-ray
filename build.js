@@ -28,7 +28,8 @@ const argv = process.argv.slice(2);
 const isWatch = argv.includes('--watch');
 const isPackage = argv.includes('--package');
 function selectedTargets() {
-  if (isPackage || argv.includes('--all')) return ['chrome', 'firefox', 'safari'];
+  if (isPackage) return ['chrome', 'firefox'];
+  if (argv.includes('--all')) return ['chrome', 'firefox', 'safari'];
   if (argv.includes('--firefox-only')) return ['firefox'];
   if (argv.includes('--safari-only')) return ['safari'];
   return argv.includes('--firefox') ? ['chrome', 'firefox'] : ['chrome'];
