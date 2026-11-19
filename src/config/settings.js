@@ -22,10 +22,10 @@ export const DEFAULT_THRESHOLD = 30;
 
 export const DEFAULTS = Object.freeze({
   showBadges: true,
-  muteSuspicious: false,
+  muteSuspicious: true,
   hideSuspicious: false,
   suspiciousThreshold: DEFAULT_THRESHOLD,
-  clientR9K: false,
+  clientR9K: true,
   r9kAction: 'mute',
   enableAuditLog: false,
   recordSession: false,
@@ -49,10 +49,10 @@ export function normalizeSettings(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
   const settings = {
     showBadges: source.showBadges !== false,
-    muteSuspicious: source.muteSuspicious === true,
+    muteSuspicious: source.muteSuspicious !== false,
     hideSuspicious: source.hideSuspicious === true,
     suspiciousThreshold: clampThreshold(source.suspiciousThreshold),
-    clientR9K: source.clientR9K === true,
+    clientR9K: source.clientR9K !== false,
     r9kAction: source.r9kAction === 'hide' ? 'hide' : 'mute',
     enableAuditLog: source.enableAuditLog === true,
     recordSession: source.recordSession === true,

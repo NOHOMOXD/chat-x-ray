@@ -135,7 +135,7 @@ export const MESSAGES = Object.freeze({
     'viewer.status': 'Статус: {label}.',
     'viewer.wave': 'Волна ботов в чате.',
 
-    'tip.badge.points': '{score} из 100',
+    'tip.badge.points': 'BOT {score}',
     'tip.history.previous': 'Прошлый эфир',
     'tip.history.typical': 'Обычно на канале',
     'tip.history.range': '{median} · {low}–{high} · эфиры {count}',
@@ -145,7 +145,6 @@ export const MESSAGES = Object.freeze({
     'tip.history.normal': 'Обычная для канала',
     'tip.history.group': 'В группе на {count} из {total} прошлых эфиров',
     'tip.history.coordination': 'Совпадения состава и текста · эфиры {count}',
-    'tip.coverage.viewer': 'Непрерывные замеры онлайна',
     'settings.clearHistory': 'Очистить историю эфиров',
     'settings.historyCleared': 'История очищена',
     'settings.historyClearFailed': 'Не удалось очистить историю',
@@ -353,6 +352,20 @@ export const MESSAGES = Object.freeze({
     'options.eyebrow': 'ЛОКАЛЬНО · БЕЗ СЕТИ',
     'options.lead':
       'Локальный рентген чата: бейджи ботов, клиентский R9K, аудит и расчёт реального онлайна. Всё считается в памяти вкладки.',
+    'options.help': 'Как это работает',
+    'options.filters': 'Подозрительные аккаунты',
+    'options.badge': 'Показывать бейдж BOT',
+    'options.action': 'Сообщения выше порога',
+    'options.keep': 'Оставлять',
+    'options.repeats': 'Повторы в чате',
+    'options.stats': 'Статистика',
+    'options.estimate': 'Оценка рядом со счётчиком Twitch',
+    'options.data': 'Данные и язык',
+    'options.exportHint': 'Скачать журнал и запись можно в настройках чата на странице эфира.',
+    'options.weights': 'За что начисляются баллы',
+    'options.scoreHelp': 'BOT 30 означает 30 баллов подозрительности. Наведи курсор на бейдж перед ником, чтобы увидеть признаки и их вклад.',
+    'options.repeatHelp': 'R9K ищет одинаковые и похожие сообщения и цепочки повторяющихся символов. Поэтому даже реплика автора без бейджа BOT может приглушаться.',
+    'options.estimateHelp': 'Модель предполагает, что за 10 минут пишут 8–12,5% зрителей. Например, 1 000 уникальных авторов, прошедших фильтр, дают оценку 8 000–12 500 зрителей до ограничения медианой онлайна Twitch. Доля пишущих на конкретном эфире может отличаться.',
     'options.heading': 'Настройки',
     'options.thresholdLabel': 'Порог срабатывания (10–100 баллов)',
     'options.auditHelp':
@@ -361,13 +374,13 @@ export const MESSAGES = Object.freeze({
       'При включении расширение запрашивает createdAt у gql.twitch.tv для подозрительных аккаунтов и тех, кто может пересечь порог после проверки возраста. Расширение кэширует ответы в памяти вкладки. Это неофициальный endpoint.',
     'options.hint':
       'Анализ в памяти вкладки; сеть — только при включённом GQL-возрасте. Те же настройки доступны в панели Chat X-Ray на странице стрима.',
-    'options.cardR9k.title': 'Адаптивный R9K',
+    'options.cardR9k.title': 'Почему сообщение приглушено?',
     'options.cardR9k.body':
       'Точные нормализованные повторы ищутся в 15-минутном индексе, нечёткий поиск — по последним 1000 сообщений. Короткие сообщения и символьный флуд проверяются отдельно.',
-    'options.cardScore.title': 'Скор бота (матрица 100%)',
+    'options.cardScore.title': 'Что значит BOT 30?',
     'options.cardScore.body':
       'Пустые значки 15, дефолтный цвет 10, цифровой суффикс 10, первое сообщение 10, кластер ID 15, новый пустой аккаунт 10, волна 10, ритм 5, стерильный текст 5, самоповторы 10. Отдельно жёсткий сигнал «скам» +25.',
-    'options.cardViewers.title': 'Реальный онлайн',
+    'options.cardViewers.title': 'Откуда берётся оценка зрителей?',
     'options.cardViewers.body':
       'Официальное число Twitch не меняется. Рядом — диапазон живых зрителей по чистым уникальным чаттерам. Скобки показывают загрузку данных, волна ботов красит счётчик в красный.',
     'options.footerLib': 'Twitch Chat X-Ray · Manifest V3 · ES Modules',
@@ -403,7 +416,7 @@ export const MESSAGES = Object.freeze({
     'viewer.status': 'Status: {label}.',
     'viewer.wave': 'Bot wave in chat.',
 
-    'tip.badge.points': '{score} out of 100',
+    'tip.badge.points': 'BOT {score}',
     'tip.history.previous': 'Previous broadcast',
     'tip.history.typical': 'Typical for this channel',
     'tip.history.range': '{median} · {low}–{high} · broadcasts {count}',
@@ -413,7 +426,6 @@ export const MESSAGES = Object.freeze({
     'tip.history.normal': 'Typical for this channel',
     'tip.history.group': 'In a group in {count} of {total} past broadcasts',
     'tip.history.coordination': 'Matching members and text · broadcasts {count}',
-    'tip.coverage.viewer': 'Continuous viewer count coverage',
     'settings.clearHistory': 'Clear broadcast history',
     'settings.historyCleared': 'History cleared',
     'settings.historyClearFailed': 'Could not clear history',
@@ -619,6 +631,20 @@ export const MESSAGES = Object.freeze({
     'options.eyebrow': 'LOCAL · NO NETWORK',
     'options.lead':
       'A local chat X-ray: bot badges, client-side R9K, audit log and a live-viewer estimate. Everything is computed inside the tab.',
+    'options.help': 'How it works',
+    'options.filters': 'Suspicious accounts',
+    'options.badge': 'Show BOT badges',
+    'options.action': 'Messages at or above threshold',
+    'options.keep': 'Keep visible',
+    'options.repeats': 'Repeated messages',
+    'options.stats': 'Statistics',
+    'options.estimate': 'Show estimate beside the Twitch viewer count',
+    'options.data': 'Data and language',
+    'options.exportHint': 'Download the audit log and recording from the chat settings on the stream page.',
+    'options.weights': 'Score breakdown',
+    'options.scoreHelp': 'BOT 30 means a suspicion score of 30 points. Hover over the badge before a username to see which signals contributed.',
+    'options.repeatHelp': 'R9K detects repeated or similar messages and runs of identical characters. It can dim a message even when its author has no BOT badge.',
+    'options.estimateHelp': 'The model assumes that 8–12.5% of viewers write in ten minutes. For example, 1,000 unique authors passing the filter yield an estimate of 8,000–12,500 viewers before the cap based on the median Twitch count. Participation varies by stream.',
     'options.heading': 'Settings',
     'options.thresholdLabel': 'Action threshold (10–100 points)',
     'options.auditHelp':
@@ -627,13 +653,13 @@ export const MESSAGES = Object.freeze({
       'When enabled, the extension asks gql.twitch.tv for createdAt of suspicious accounts and accounts that could reach the threshold after the age check. It caches answers in tab memory. This is an unofficial endpoint.',
     'options.hint':
       'Analysis lives in the tab; network only with GQL age lookup. The same settings are available in the Chat X-Ray panel on the stream page.',
-    'options.cardR9k.title': 'Adaptive R9K',
+    'options.cardR9k.title': 'Why is a message dimmed?',
     'options.cardR9k.body':
       'Exact normalized repeats are searched in a 15-minute index; fuzzy matching scans the last 1000 messages. Short messages and character floods are checked separately.',
-    'options.cardScore.title': 'Bot score (100% matrix)',
+    'options.cardScore.title': 'What does BOT 30 mean?',
     'options.cardScore.body':
       'No badges 15, default color 10, numeric suffix 10, first message 10, id cluster 15, fresh empty account 10, wave 10, rhythm 5, sterile text 5, self-repeat 10. A hard “scam” signal adds +25.',
-    'options.cardViewers.title': 'Real viewers',
+    'options.cardViewers.title': 'How is the audience estimated?',
     'options.cardViewers.body':
       'The official Twitch number stays untouched. Next to it is a live-viewer range built from clean unique chatters. The parentheses show data loading, and a bot wave turns the counter red.',
     'options.footerLib': 'Twitch Chat X-Ray · Manifest V3 · ES Modules',

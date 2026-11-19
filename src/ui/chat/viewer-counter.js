@@ -277,7 +277,6 @@ export class ViewerCounterAdjuster {
     model.sampledAt = now;
     model.input = modelInput;
     model.observationMs = stats.observationMs;
-    model.viewerCoverageMs = stats.viewerCoverageMs;
     model.chatAlert = stats.chatConnected !== false && (stats.waveAlert ||
       (stats.suspiciousShare > 0 && stats.suspiciousShare * 100 >= threshold));
     model.viewerStatus = model.churn.lastAnomaly &&

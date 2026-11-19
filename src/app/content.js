@@ -673,8 +673,6 @@ export class ChatXRayApp {
         ...(this.broadcastData?.checkpoint?.intervals?.chat || []), ...this.chatClock.snapshot(),
       ]),
       tabMs: Math.max(0, now - this.channelChangedAt),
-      viewerCoverageMs: this.viewerClock.since === null ? 0 :
-        Math.max(0, this.viewerClock.last - this.viewerClock.since),
       chatConnected: this.chatSince !== null,
     };
   }

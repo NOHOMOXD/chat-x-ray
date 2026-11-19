@@ -1,5 +1,7 @@
 # Development
 
+**English** · [Русский](ru/development.md)
+
 ## Setup
 
 ```bash

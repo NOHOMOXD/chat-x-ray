@@ -1,16 +1,18 @@
 # Chat X-Ray for Twitch
 
+**English** · [Русский](README.ru.md)
+
 A local-only browser extension (Manifest V3) that reads the Twitch chat you
-already have open and tells you who in it looks like a bot. Chrome, Edge, Opera
+already have open and tells you who in it looks like a bot. Chrome, Edge, Opera,
 Firefox and Safari on Mac. RU / EN.
 
-Nothing leaves the tab: no servers, no accounts, no analytics.
+Analysis runs locally. The optional account-age lookup contacts Twitch.
 
 > Not affiliated with, endorsed by, or sponsored by Twitch Interactive, Inc.
 
 ## What it does
 
-- **Bot badges.** Each suspicious account gets a `65 out of 100` chip before the
+- **Bot badges.** Each suspicious account gets a `BOT 65` chip before the
   nickname, colour-graded from gold to red. Hover for the exact signals.
 - **Adaptive R9K.** Catches pastes, near-duplicates and character floods across
   a 15-minute window, optionally muting or hiding them.
@@ -32,7 +34,7 @@ Scores, thresholds, the viewer model and its limits: **[docs/algorithm.md](docs/
 ```bash
 git clone <this repo>
 cd chat-x-ray
-npm install
+npm ci
 npm run build:all
 ```
 
@@ -67,9 +69,9 @@ Local-only, one permission (`storage`), no network by default. Full detail:
 
 ```bash
 npm test            # unit + DOM tests (Vitest, happy-dom)
-npm run test:e2e    # real build loaded in Chromium (Playwright)
+npm run test:e2e    # Chromium and Firefox (Playwright)
 npm run verify      # everything CI runs
-npm run build:all   # dist/chrome + dist/firefox
+npm run build:all   # Chromium, Firefox and Safari resources
 ```
 
 Layout, scripts and testing notes: **[docs/development.md](docs/development.md)**.

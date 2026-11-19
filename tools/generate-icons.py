@@ -16,117 +16,28 @@ def clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
     return max(low, min(high, value))
 
 
-def smoothstep(edge0: float, edge1: float, x: float) -> float:
-    if edge0 == edge1:
-        return 1.0 if x >= edge1 else 0.0
-    t = clamp((x - edge0) / (edge1 - edge0))
-    return t * t * (3.0 - 2.0 * t)
-
-
-def rounded_box_sdf(x: float, y: float, half: float, radius: float) -> float:
-    qx = abs(x) - (half - radius)
-    qy = abs(y) - (half - radius)
-    outside = math.hypot(max(qx, 0.0), max(qy, 0.0))
-    inside = min(max(qx, qy), 0.0)
-    return outside + inside - radius
-
-
-def hsl_to_rgb(h: float, s: float, l: float) -> tuple[float, float, float]:
-    s /= 100.0
-    l /= 100.0
-    c = (1.0 - abs(2.0 * l - 1.0)) * s
-    hp = (h % 360.0) / 60.0
-    x = c * (1.0 - abs(hp % 2.0 - 1.0))
-    if hp < 1.0:
-        r, g, b = c, x, 0.0
-    elif hp < 2.0:
-        r, g, b = x, c, 0.0
-    elif hp < 3.0:
-        r, g, b = 0.0, c, x
-    elif hp < 4.0:
-        r, g, b = 0.0, x, c
-    elif hp < 5.0:
-        r, g, b = x, 0.0, c
-    else:
-        r, g, b = c, 0.0, x
-    m = l - c / 2.0
-    return (r + m, g + m, b + m)
-
-
-def blend(dst, src, alpha: float):
-    if alpha <= 0.0:
-        return dst
-    return tuple(src[i] * alpha + dst[i] * (1.0 - alpha) for i in range(3))
-
-
 def render_icon(size: int) -> bytes:
-    supersample = 8 if size <= 32 else 4
+    supersample = 8
     hi = size * supersample
-    pixels = [(0.0, 0.0, 0.0, 0.0)] * hi * hi
-
+    pixels = []
     for py in range(hi):
-        # Normalized coordinates with pixel centres.
-        yn = ((py + 0.5) / hi) * 2.0 - 1.0
         for px in range(hi):
-            xn = ((px + 0.5) / hi) * 2.0 - 1.0
-            rgb = (0.0, 0.0, 0.0)
-            alpha = 0.0
-
-            # Rounded dark tile.
-            box = rounded_box_sdf(xn, yn, 0.92, 0.24)
-            if box < 0.012:
-                tile_alpha = smoothstep(0.012, -0.008, box)
-                tile = (0.075, 0.075, 0.09)
-                # Slightly lighter inner plate so the icon reads at 16 px.
-                inner = rounded_box_sdf(xn, yn, 0.80, 0.20)
-                if inner < 0.0:
-                    tile = (0.105, 0.098, 0.125)
-                rgb = blend(rgb, tile, tile_alpha)
-                alpha = tile_alpha
-
-                # Thin warm border.
-                border = 1.0 - smoothstep(0.0, 0.045, abs(box + 0.006))
-                if border > 0.0:
-                    rgb = blend(rgb, (0.75, 0.32, 0.16), border * 0.55)
-
-            # Almond eye outline + iris.
-            # y_limit controls the lens shape; the bright fill only lives
-            # between the outer ellipse and a slightly shrunken inner one.
-            lens = 0.34 * (max(0.0, 1.0 - xn * xn) ** 0.82) + 1e-6
-            normalized_y = abs(yn) / lens
-            if abs(xn) < 0.86 and normalized_y < 1.0:
-                t = clamp((xn + 0.86) / 1.72)
-                hue = 52.0 - 52.0 * t
-                eye_color = hsl_to_rgb(hue, 92.0, 60.0)
-                # Outer rim is darker; interior is bright.
-                rim = smoothstep(0.72, 0.98, normalized_y)
-                edge = smoothstep(0.70, 1.0, abs(xn))
-                eye_alpha = 0.96 - 0.45 * rim - 0.35 * edge
-                rgb = blend(rgb, eye_color, eye_alpha)
-                alpha = max(alpha, eye_alpha)
-
-                # Sclera highlight just above the iris.
-                if normalized_y < 0.62 and abs(xn) > 0.42:
-                    rgb = blend(rgb, (1.0, 0.94, 0.72), 0.20)
-
-            iris_distance = math.hypot(xn, yn + 0.01)
-            if iris_distance < 0.225:
-                iris_alpha = smoothstep(0.225, 0.205, iris_distance)
-                iris_color = hsl_to_rgb(8.0, 90.0, 48.0)
-                rgb = blend(rgb, iris_color, iris_alpha)
-                alpha = max(alpha, iris_alpha)
-            if iris_distance < 0.105:
-                pupil_alpha = smoothstep(0.105, 0.085, iris_distance)
-                rgb = blend(rgb, (0.055, 0.05, 0.065), pupil_alpha)
-                alpha = max(alpha, pupil_alpha)
-
-            # Tiny specular highlight.
-            highlight = math.hypot(xn + 0.07, yn + 0.08)
-            if highlight < 0.045:
-                rgb = blend(rgb, (1.0, 0.97, 0.85), smoothstep(0.045, 0.02, highlight))
-                alpha = max(alpha, 0.92)
-
-            pixels[py * hi + px] = (rgb[0], rgb[1], rgb[2], clamp(alpha))
+            x, y = (px + 0.5) / hi, (py + 0.5) / hi
+            dx, dy = abs(x - 0.5), abs(y - 0.5)
+            radius = math.hypot(dx, dy)
+            # Two tapered lids around a lavender-rimmed lens.
+            curve = (dx / 0.48) ** 2
+            outer = 0.456 - 0.30 * curve
+            inner = 0.366 - 0.21 * curve
+            lid = dx < 0.48 and inner <= dy <= outer
+            cross = dx + dy <= 0.293 and abs(dx - dy) <= 0.065
+            lavender = (0.77, 0.56, 1.0)
+            ink = (0.13, 0.12, 0.16)
+            rgb = lavender if 0.244 < radius <= 0.313 or cross else ink
+            # A fine light rim keeps the dark lids visible on charcoal toolbars.
+            if lid and (outer - dy < 0.021 or dy - inner < 0.021):
+                rgb = (0.75, 0.69, 0.84)
+            pixels.append((*rgb, float(lid or radius <= 0.313)))
 
     # Downsample with alpha-aware box filtering.
     out = bytearray()

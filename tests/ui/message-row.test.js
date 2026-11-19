@@ -138,7 +138,7 @@ describe('MessageRow', () => {
 
     const badge = row.querySelector('.tcx-bot-badge');
     expect(badge).not.toBe(null);
-    expect(badge.textContent).toBe('60 out of 100');
+    expect(badge.textContent).toBe('BOT 60');
     expect(row.dataset.tcxBotScore).toBe('60');
   });
 

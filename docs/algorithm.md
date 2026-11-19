@@ -1,5 +1,7 @@
 # How the analysis works
 
+**English** · [Русский](ru/algorithm.md)
+
 The extension observes the chat IRC connection and viewer counter in the
 current Twitch tab. Session capture is opt-in and lives in that tab's memory.
 The account-age option can request profile creation dates from Twitch.

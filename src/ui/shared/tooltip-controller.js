@@ -301,11 +301,6 @@ export function buildViewerTooltip(model) {
       covered === 10 ? 'tip.sliding' : 'tip.covered', { minutes: covered }
     )));
   }
-  if (!model.stale && Number.isFinite(model.viewerCoverageMs) && model.viewerCoverageMs < 600000) {
-    list.appendChild(row(t('tip.coverage.viewer'), t('tip.covered', {
-      minutes: Math.floor(model.viewerCoverageMs / 60000),
-    })));
-  }
   if (!model.stale && model.chatAlert && model.activeUsers) {
     list.appendChild(row(t('tip.chatAlertLabel'), t('tip.chatAlertValue', {
       suspicious: number(model.suspiciousUsers), active: number(model.activeUsers),

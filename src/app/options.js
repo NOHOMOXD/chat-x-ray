@@ -5,6 +5,7 @@
  * rendered with the active UI language, so the page is English on English
  * browsers and Russian on Russian ones.
  */
+import { createBroadcastHistoryClient } from '../platform/broadcast-history-client.js';
 import { SettingsRepository, normalizeSettings, DEFAULTS } from '../config/settings.js';
 import {
   getLocale,
@@ -25,6 +26,23 @@ import {
   const languageSelect = document.querySelector('[data-opt-setting="language"]');
   let saveTimer = null;
   let settings = normalizeSettings(DEFAULTS);
+
+  function navigate() {
+    const active = location.hash === '#help' ? 'help' : 'settings';
+    for (const link of document.querySelectorAll('nav a')) {
+      const id = link.hash.slice(1);
+      document.getElementById(id).hidden = id !== active;
+      if (id === active) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    }
+  }
+  window.addEventListener('hashchange', navigate);
+  navigate();
+
+  document.getElementById('clear-history').addEventListener('click', async () => {
+    await createBroadcastHistoryClient().clear();
+    showSaved(t('settings.historyCleared'));
+  });
 
   function applyLanguage(locale) {
     setLocale(locale);
@@ -63,7 +81,9 @@ import {
     settings = normalizeSettings(next);
     inputs.forEach((input) => {
       const key = input.dataset.optSetting;
-      if (key === 'suspiciousThreshold') {
+      if (key === 'suspectAction') {
+        input.value = settings.hideSuspicious ? 'hide' : settings.muteSuspicious ? 'mute' : 'keep';
+      } else if (key === 'suspiciousThreshold') {
         input.value = String(settings.suspiciousThreshold);
       } else if (key === 'r9kAction' || key === 'language') {
         input.value = settings[key];
@@ -93,7 +113,10 @@ import {
     const next = Object.assign({}, settings);
     inputs.forEach((input) => {
       const key = input.dataset.optSetting;
-      if (key === 'suspiciousThreshold') {
+      if (key === 'suspectAction') {
+        next.muteSuspicious = input.value === 'mute';
+        next.hideSuspicious = input.value === 'hide';
+      } else if (key === 'suspiciousThreshold') {
         next[key] = Number(input.value);
       } else if (key === 'r9kAction' || key === 'language') {
         next[key] = input.value;
@@ -132,22 +155,7 @@ import {
       return;
     }
 
-    input.addEventListener('change', () => {
-      const key = input.dataset.optSetting;
-      if (key === 'muteSuspicious' && input.checked) {
-        const hide = document.querySelector('[data-opt-setting="hideSuspicious"]');
-        if (hide) {
-          hide.checked = false;
-        }
-      }
-      if (key === 'hideSuspicious' && input.checked) {
-        const mute = document.querySelector('[data-opt-setting="muteSuspicious"]');
-        if (mute) {
-          mute.checked = false;
-        }
-      }
-      commit();
-    });
+    input.addEventListener('change', commit);
   });
 
   if (resetButton) {

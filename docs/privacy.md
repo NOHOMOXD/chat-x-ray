@@ -1,5 +1,7 @@
 # Privacy and permissions
 
+**English** · [Русский](ru/privacy.md)
+
 The extension is **local-only**.
 
 - **No network requests by default.** Tippy.js is bundled; no fonts, analytics

@@ -1,5 +1,7 @@
 # Distribution
 
+**English** · [Русский](ru/distribution.md)
+
 GitHub Releases carry the Chromium ZIP for Chrome and Opera, the Firefox ZIP,
 the source ZIP, the macOS Safari Xcode project ZIP and SHA-256 checksums.
 Verify a downloaded release with `shasum -a 256 -c SHA256SUMS.txt` on macOS

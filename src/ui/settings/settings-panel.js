@@ -13,6 +13,7 @@
  * owns its open/close lifecycle (Escape, backdrop click, close button) and
  * every label goes through t() so it follows the UI language.
  */
+import { DEFAULTS } from '../../config/settings.js';
 import { setTextIfChanged } from '../shared/ui-utils.js';
 import { t } from '../../i18n/i18n.js';
 
@@ -635,25 +636,7 @@ export class SettingsModal {
   }
 
   _reset() {
-    const reset = Object.assign({}, this.getSettings());
-    const defaults = {
-      showBadges: true,
-      muteSuspicious: false,
-      hideSuspicious: false,
-      suspiciousThreshold: 30,
-      clientR9K: false,
-      r9kAction: 'mute',
-      enableAuditLog: false,
-      recordSession: false,
-      adjustViewerCounter: true,
-      accountAgeLookup: false,
-      showChatStats: true,
-      language: '',
-    };
-    Object.keys(defaults).forEach((key) => {
-      reset[key] = defaults[key];
-    });
-    this.onCommit(reset);
+    this.onCommit({ ...this.getSettings(), ...DEFAULTS });
     this.sync();
   }
 

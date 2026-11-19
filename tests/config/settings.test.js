@@ -27,6 +27,12 @@ function fakeStorage(initial, { delay = 0 } = {}) {
 }
 
 describe('defaults', () => {
+  it('dims suspicious messages and repeats by default and respects saved choices', () => {
+    expect(normalizeSettings({})).toMatchObject({ clientR9K: true, muteSuspicious: true, r9kAction: 'mute' });
+    const saved = { clientR9K: false, muteSuspicious: false, r9kAction: 'hide' };
+    expect(normalizeSettings(saved)).toMatchObject(saved);
+  });
+
   it('ship a 30% threshold and a visible stats strip', () => {
     const defaults = normalizeSettings(DEFAULTS);
     expect(defaults.suspiciousThreshold).toBe(30);

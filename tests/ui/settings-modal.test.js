@@ -274,7 +274,7 @@ describe('modal fields', () => {
     const harness = makeModal({
       suspiciousThreshold: 80,
       showBadges: false,
-      clientR9K: true,
+      clientR9K: false,
       language: 'ru',
     });
     harness.modal.openModal();
@@ -282,7 +282,7 @@ describe('modal fields', () => {
 
     expect(harness.settings.suspiciousThreshold).toBe(30);
     expect(harness.settings.showBadges).toBe(true);
-    expect(harness.settings.clientR9K).toBe(false);
+    expect(harness.settings.clientR9K).toBe(true);
     expect(harness.settings.language).toBe('');
   });
 });
