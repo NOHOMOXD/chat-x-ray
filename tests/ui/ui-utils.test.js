@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   botHue,
   formatNumber,
+  formatViewerRange,
   formatViewerRangeCompact,
   isAlertState,
   isExtensionMutation,
@@ -60,6 +61,9 @@ describe('number formatting', () => {
     expect(formatViewerRangeCompact({ low: 640, high: 900 }, 'ru-RU')).toBe(
       '640–900'
     );
+    expect(formatViewerRange({ low: 14, high: 14 }, 'ru')).toBe('≈14');
+    expect(formatViewerRangeCompact({ low: 14, high: 14 }, 'ru')).toBe('14');
+    expect(formatViewerRangeCompact({ low: 1010, high: 1020 }, 'en')).toBe('1K');
     expect(formatViewerRangeCompact(null)).toBe('');
   });
 });

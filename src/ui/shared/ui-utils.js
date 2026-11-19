@@ -47,6 +47,13 @@ export function formatNumber(value, locale) {
   });
 }
 
+export function formatViewerRange(range, locale) {
+  if (!range) return '';
+  const low = formatNumber(range.low, locale);
+  const high = formatNumber(range.high, locale);
+  return low === high ? '≈' + low : low + ' – ' + high;
+}
+
 /**
  * Compact viewer range for the inline counter: `≈8–12,5 тыс.` / `≈2,4–3,8 тыс.`
  * / `≈640–900`. The full, exact range stays in the tooltip.
@@ -80,16 +87,12 @@ export function formatViewerRangeCompact(range, locale) {
   const millions = isRu ? ' млн' : 'M';
   const thousands = isRu ? ' тыс.' : 'K';
 
-  if (upper >= 1000000) {
-    return `${compact(lower, 1000000)}–${compact(upper, 1000000)}${millions}`;
-  }
-  if (upper >= 1000) {
-    return `${compact(lower, 1000)}–${compact(upper, 1000)}${thousands}`;
-  }
-  return `${formatNumber(lower, resolvedLocale)}–${formatNumber(
-    upper,
-    resolvedLocale
-  )}`;
+  const divisor = upper >= 1000000 ? 1000000 : upper >= 1000 ? 1000 : 1;
+  const suffix = divisor === 1000000 ? millions : divisor === 1000 ? thousands : '';
+  const display = (value) => divisor === 1 ? formatNumber(value, resolvedLocale) : compact(value, divisor);
+  const first = display(lower);
+  const last = display(upper);
+  return (first === last ? first : first + '–' + last) + suffix;
 }
 
 export function isExtensionNode(node) {

@@ -8,7 +8,7 @@
  * Every tooltip is rendered through t() so it follows the UI language.
  */
 import tippy from 'tippy.js';
-import { botHue, formatNumber } from './ui-utils.js';
+import { botHue, formatNumber, formatViewerRange } from './ui-utils.js';
 import { formatPercent, getLocale, t } from '../../i18n/i18n.js';
 
 function el(tag, className, text) {
@@ -250,7 +250,7 @@ export function buildViewerTooltip(model) {
     model.loading && !model.loading.ready;
   if (model.range) {
     hero.appendChild(el('div', 'tcx-tip__hero-value tcx-tip__hero-value--range',
-      number(model.range.low) + ' – ' + number(model.range.high)));
+      formatViewerRange(model.range, locale)));
     hero.appendChild(el('div', 'tcx-tip__hero-caption',
       t('tip.estimate') + (model.sessionMs < 600000 ? ' · ' + t('tip.provisional') : '')));
   } else if (gathering) {

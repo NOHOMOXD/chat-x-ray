@@ -21,6 +21,7 @@
  */
 import {
   formatNumber,
+  formatViewerRange,
   formatViewerRangeCompact,
   setAttributeIfChanged,
   setTextIfChanged,
@@ -97,16 +98,7 @@ export function parseTwitchViewerCount(rawText) {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-export function formatViewerRange(range, locale) {
-  if (!range) {
-    return '';
-  }
-  const resolved = locale || getLocale();
-  return `${formatNumber(range.low, resolved)} – ${formatNumber(
-    range.high,
-    resolved
-  )}`;
-}
+export { formatViewerRange };
 
 /**
  * Text inside the parentheses. Loading beats the range on purpose: while the
