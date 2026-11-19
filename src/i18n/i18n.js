@@ -135,9 +135,23 @@ export const MESSAGES = Object.freeze({
     'viewer.status': 'Статус: {label}.',
     'viewer.wave': 'Волна ботов в чате.',
 
+    'tip.badge.points': '{score} из 100',
+    'tip.history.previous': 'Прошлый эфир',
+    'tip.history.typical': 'Обычно на канале',
+    'tip.history.range': '{median} · {low}–{high} · эфиры {count}',
+    'tip.history.relation': 'Вовлечённость',
+    'tip.history.low': 'Ниже обычной для канала',
+    'tip.history.high': 'Выше обычной для канала',
+    'tip.history.normal': 'Обычная для канала',
+    'tip.history.group': 'В группе на {count} из {total} прошлых эфиров',
+    'tip.history.coordination': 'Совпадения состава и текста · эфиры {count}',
+    'tip.coverage.viewer': 'Непрерывные замеры онлайна',
+    'settings.clearHistory': 'Очистить историю эфиров',
+    'settings.historyCleared': 'История очищена',
+    'settings.historyClearFailed': 'Не удалось очистить историю',
     'tip.badge.subtitle': 'Оценка подозрительности аккаунта',
     'tip.badge.scoreAria':
-      'Подозрительность {score} процентов. {triggers}',
+      'Подозрительность — {score} из 100. {triggers}',
     'tip.badge.exempt': 'Привилегированный аккаунт: скоринг отключён',
     'tip.badge.noTriggers': 'Триггеры не сработали',
     'tip.badge.flood':
@@ -145,7 +159,7 @@ export const MESSAGES = Object.freeze({
     'tip.badge.age': 'Возраст аккаунта: {days} дн. (Twitch GQL).',
     'tip.badge.r9k': 'R9K: похоже на недавнее сообщение ({percent}%)',
     'tip.badge.footer':
-      'Порог действий: {threshold}% · R9K {state}',
+      'Порог действий: {threshold}/100 · R9K {state}',
     'tip.badge.wave': 'Волна ботов: аккаунт попал в аномальный всплеск чата.',
 
     'tip.details': 'Подробнее',
@@ -287,14 +301,14 @@ export const MESSAGES = Object.freeze({
 
     'settings.title': 'Настройки',
     'settings.section.filters': 'Бейджи и фильтрация',
-    'settings.showBadges': 'Показывать бейджи [BOT %]',
+    'settings.showBadges': 'Показывать баллы подозрительности',
     'settings.mute': 'Приглушать подозрительные аккаунты',
     'settings.hide': 'Скрывать подозрительные аккаунты',
     'settings.threshold': 'Порог срабатывания',
     'settings.thresholdAria':
-      'Порог срабатывания подозрительности botScore от 10% до 100%',
+      'Порог подозрительности от 10 до 100 баллов',
     'settings.thresholdHelp':
-      '10–30% — чувствительно, 30% — по умолчанию, 50% — сбалансировано, 70–100% — только строгие боты.',
+      '10–30 баллов — чувствительно, 30 — по умолчанию, 50 — средний порог, 70–100 — строгий порог.',
     'settings.section.r9k': 'R9K',
     'settings.r9k': 'Клиентский R9K (пасты и дубликаты)',
     'settings.r9kAction': 'Действие R9K',
@@ -340,7 +354,7 @@ export const MESSAGES = Object.freeze({
     'options.lead':
       'Локальный рентген чата: бейджи ботов, клиентский R9K, аудит и расчёт реального онлайна. Всё считается в памяти вкладки.',
     'options.heading': 'Настройки',
-    'options.thresholdLabel': 'Порог срабатывания (10% – 100%)',
+    'options.thresholdLabel': 'Порог срабатывания (10–100 баллов)',
     'options.auditHelp':
       'Журнал хранится в памяти вкладки. Копирование и скачивание доступны в панели настроек Chat X-Ray на странице стрима.',
     'options.accountAgeHelp':
@@ -389,16 +403,30 @@ export const MESSAGES = Object.freeze({
     'viewer.status': 'Status: {label}.',
     'viewer.wave': 'Bot wave in chat.',
 
+    'tip.badge.points': '{score} out of 100',
+    'tip.history.previous': 'Previous broadcast',
+    'tip.history.typical': 'Typical for this channel',
+    'tip.history.range': '{median} · {low}–{high} · broadcasts {count}',
+    'tip.history.relation': 'Engagement',
+    'tip.history.low': 'Below the channel’s usual range',
+    'tip.history.high': 'Above the channel’s usual range',
+    'tip.history.normal': 'Typical for this channel',
+    'tip.history.group': 'In a group in {count} of {total} past broadcasts',
+    'tip.history.coordination': 'Matching members and text · broadcasts {count}',
+    'tip.coverage.viewer': 'Continuous viewer count coverage',
+    'settings.clearHistory': 'Clear broadcast history',
+    'settings.historyCleared': 'History cleared',
+    'settings.historyClearFailed': 'Could not clear history',
     'tip.badge.subtitle': 'Account suspiciousness score',
     'tip.badge.scoreAria':
-      'Suspiciousness {score} percent. {triggers}',
+      'Suspiciousness {score} out of 100. {triggers}',
     'tip.badge.exempt': 'Privileged account: scoring disabled',
     'tip.badge.noTriggers': 'No triggers fired',
     'tip.badge.flood':
       'Character flood: R9K applies the selected action (mute/hide).',
     'tip.badge.age': 'Account age: {days} days (Twitch GQL).',
     'tip.badge.r9k': 'R9K: similar to a recent message ({percent}%)',
-    'tip.badge.footer': 'Action threshold: {threshold}% · R9K {state}',
+    'tip.badge.footer': 'Action threshold: {threshold}/100 · R9K {state}',
     'tip.badge.wave': 'Bot wave: this account landed in an abnormal chat spike.',
 
     'tip.details': 'Details',
@@ -539,14 +567,14 @@ export const MESSAGES = Object.freeze({
 
     'settings.title': 'Settings',
     'settings.section.filters': 'Badges & filtering',
-    'settings.showBadges': 'Show [BOT %] badges',
+    'settings.showBadges': 'Show suspiciousness scores',
     'settings.mute': 'Mute suspicious accounts',
     'settings.hide': 'Hide suspicious accounts',
     'settings.threshold': 'Action threshold',
     'settings.thresholdAria':
-      'Bot score action threshold from 10% to 100%',
+      'Bot score action threshold from 10 to 100 points',
     'settings.thresholdHelp':
-      '10–30% is sensitive, 30% is the default, 50% is balanced, 70–100% catches only strict bots.',
+      '10–30 points is sensitive, 30 is the default, 50 is balanced, and 70–100 is strict.',
     'settings.section.r9k': 'R9K',
     'settings.r9k': 'Client-side R9K (pastes & duplicates)',
     'settings.r9kAction': 'R9K action',
@@ -592,7 +620,7 @@ export const MESSAGES = Object.freeze({
     'options.lead':
       'A local chat X-ray: bot badges, client-side R9K, audit log and a live-viewer estimate. Everything is computed inside the tab.',
     'options.heading': 'Settings',
-    'options.thresholdLabel': 'Action threshold (10% – 100%)',
+    'options.thresholdLabel': 'Action threshold (10–100 points)',
     'options.auditHelp':
       'The log lives in the tab memory. Copy and download buttons are available in the Chat X-Ray panel on the stream page.',
     'options.accountAgeHelp':

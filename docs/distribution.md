@@ -1,65 +1,44 @@
-# Distributing the extension
+# Distribution
 
-Where it can be published, what it costs, and how releases are automated.
+GitHub Releases carry the Chromium ZIP for Chrome and Opera, the Firefox ZIP,
+the source ZIP, the macOS Safari Xcode project ZIP and SHA-256 checksums.
+Verify a downloaded release with `shasum -a 256 -c SHA256SUMS.txt` on macOS
+or `sha256sum -c SHA256SUMS.txt` on Linux.
 
-## Stores
-
-| Store | Fee | Review | Notes |
-| --- | --- | --- | --- |
-| **Mozilla AMO** | none | minutes (unlisted) to a few days (listed) | MV3 accepted; **needs a stable `gecko.id`** |
-| **Microsoft Edge** | none | up to 7 business days | Chromium CRX; must justify each permission |
-| **Opera** | none | days | Requires a "for Twitch" style name (see below) |
-| **Chrome Web Store** | **US$5 once** | hours–days | Only store with a fee; strictest on permissions |
-
-Safari ($99/yr) and Samsung (paired with Play) are paid and out of scope.
-
-**Trademark.** Opera explicitly rejects names implying endorsement. Use a
-descriptive name — *"Chat X-Ray for Twitch"* — and keep a disclaimer in the
-description. A disclaimer alone is not a legal shield; the neutral name is the
-part that matters.
-
-## Without a store
-
-Chrome side-loading is effectively closed: self-hosted CRX has been blocked
-since Chrome 75 and `--load-extension` was removed from Google Chrome. Edge and
-Chrome both require Developer mode, which non-technical users will not do.
-
-**The one free path for ordinary users is a signed Firefox XPI:**
-
-1. Create an AMO API key at
-   <https://addons.mozilla.org/developers/addon/api/key/> (JWT issuer + secret).
-2. Sign on the **unlisted** channel — AMO signs the build but never lists it:
-
-   ```bash
-   npx web-ext sign --source-dir dist/firefox --channel=unlisted \
-     --api-key="$AMO_JWT_ISSUER" --api-secret="$AMO_JWT_SECRET" \
-     --artifacts-dir release
-   ```
-
-3. Host the resulting `.xpi` yourself and add `update_url` to
-   `browser_specific_settings.gecko` so Firefox auto-updates from your
-   `updates.json`. Users install once via *about:addons → Install Add-on From
-   File*.
-
-`gecko.id` is permanent — it is already fixed to `chat-x-ray@nohomoxd.github.io`
-in `build.js` (`GECKO_ID` overrides it). Change it now if you want a different
-id, before the first public release.
-
-## Releases via GitHub Actions
-
-`.github/workflows/release.yml` runs on every `v*` tag:
-
-1. `npm ci`, `npm test`, `npm run build:all`
-2. `web-ext lint` on the Firefox build
-3. Sign the Firefox build on the unlisted channel
-4. Attach both zips and the signed XPI to the GitHub Release
-
-Required repository secrets:
-
-| Secret | Where to get it |
+| Browser | Installation from a release |
 | --- | --- |
-| `AMO_JWT_ISSUER` | AMO API key page |
-| `AMO_JWT_SECRET` | AMO API key page |
+| Chrome | Unzip the Chromium ZIP. At `chrome://extensions` enable Developer mode and select **Load unpacked**. |
+| Opera | Unzip the same ZIP. At `opera://extensions` enable Developer mode and select **Load unpacked**. |
+| Firefox | Install the signed XPI when present. For temporary use, unzip the Firefox ZIP and select its manifest under **Load Temporary Add-on** in `about:debugging#/runtime/this-firefox`. |
+| Safari on Mac | Unzip the Safari project, open the Xcode project, select the macOS app scheme, and run it locally. Enable unsigned extensions using Safari's developer settings, enable Chat X-Ray in Safari Settings, and grant Twitch access. |
 
-Store packages are **never committed**. `dist/` and `release/` are ignored;
-CI attaches them to the release, and `npm run package` builds them locally.
+The Safari project route uses full Xcode and Safari 18 or later. For a quick
+local test on Safari 18.4 or later, build the resources with
+`npm run build:safari` and load `dist/safari` via **Add Temporary Extension**
+in Safari's developer settings. It is intended for
+local development and testing. The project archive uses the free workflow
+described by [SponsorBlock](https://github.com/ajayyy/SponsorBlock/wiki/Safari#build-it-yourself-free).
+Apple documents [signed distribution and unsigned local testing](https://developer.apple.com/documentation/safariservices/distributing-your-safari-web-extension).
+
+For a local 1.5.0 build, keep the original Chromium unpacked directory when
+replacing the build and try reloading the extension. For Firefox, keep the
+existing Gecko ID and profile. Export any audit data you want to retain before
+removing a previous installation. Uninstalling can remove extension storage.
+
+## Release automation
+
+Run the **Release** workflow manually from a pushed branch to rehearse the
+release. Download the rehearsal artifact and inspect its checksums and source
+inventory. The workflow verifies builds and tests, rebuilds the source ZIP
+in a clean directory, and uses full Xcode on macOS to generate and compile the
+unsigned Safari project. It assembles archives and checksums before publication.
+
+After review, push the tag matching all three version components, starting
+with `v1.0.0`. The tag workflow publishes the GitHub Release with generated
+notes. Optional repository secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`
+enable Mozilla signing. Keep the stable Gecko ID for existing Firefox users.
+
+Package locally with `npm ci && npm run package` from a clean Git checkout.
+On macOS with full Xcode selected, also run `npm run package:safari`.
+The source ZIP uses Git-tracked files at HEAD. Keep raw captures and local
+audit results outside the tracked tree.

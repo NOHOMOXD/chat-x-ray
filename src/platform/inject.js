@@ -4,6 +4,7 @@
  * Parses IRCv3 frames and posts structured JSON to the isolated content script.
  */
 import { parseFrame } from './irc-parser.js';
+import { observePageBroadcasts } from './broadcast-identity.js';
 
 (function () {
   'use strict';
@@ -36,10 +37,13 @@ import { parseFrame } from './irc-parser.js';
    */
   const HANDSHAKE_EVENT = 'twitch-chat-xray:handshake';
   let bridgeToken = null;
+  const latestBroadcasts = new Map();
 
   function adoptToken(token) {
     if (typeof token === 'string' && token.length >= 16) {
+      const changed = bridgeToken !== token;
       bridgeToken = token;
+      if (changed) postMessages([...latestBroadcasts.values()], '');
     }
   }
 
@@ -104,6 +108,14 @@ import { parseFrame } from './irc-parser.js';
       // Page navigation in progress; drop safely
     }
   }
+
+  observePageBroadcasts(window, (identity) => {
+    const message = { kind: 'broadcast-identity', ...identity };
+    latestBroadcasts.delete(identity.channel);
+    latestBroadcasts.set(identity.channel, message);
+    if (latestBroadcasts.size > 16) latestBroadcasts.delete(latestBroadcasts.keys().next().value);
+    postMessages([message], '');
+  });
 
   function consumeFrame(rawFrame, socketUrl) {
     if (typeof rawFrame !== 'string' || !rawFrame) {

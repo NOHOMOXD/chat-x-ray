@@ -72,11 +72,25 @@ function appendIdGroup(root, group) {
   }
 }
 
+function appendGroupHistory(root, model) {
+  if (model.groupHistory?.groupBroadcasts > 0) {
+    root.appendChild(el('div', 'tcx-tip__note', t('tip.history.group', {
+      count: model.groupHistory.groupBroadcasts, total: model.observedBroadcasts,
+    })));
+  }
+  if (model.groupHistory?.coordinatedBroadcasts > 0) {
+    root.appendChild(el('div', 'tcx-tip__note', t('tip.history.coordination', {
+      count: model.groupHistory.coordinatedBroadcasts,
+    })));
+  }
+}
+
 export function buildBadgeTooltip(model) {
   const root = el('div', 'tcx-tip');
   if (model.groupOnly) {
     root.appendChild(el('div', 'tcx-tip__title', t('tip.idGroups')));
     appendIdGroup(root, model.idGroup);
+    appendGroupHistory(root, model);
     return root;
   }
   const hue = botHue(model.score, model.threshold);
@@ -84,7 +98,7 @@ export function buildBadgeTooltip(model) {
 
   root.appendChild(
     head(
-      `BOT ${model.score}%`,
+      t('tip.badge.points', { score: model.score }),
       model.roleExempt
         ? t('tip.badge.exempt')
         : t('tip.badge.subtitle'),
@@ -148,6 +162,7 @@ export function buildBadgeTooltip(model) {
   }
 
   appendIdGroup(root, model.idGroup);
+  appendGroupHistory(root, model);
 
   if (model.isR9KDuplicate) {
     const r9k = el('div', 'tcx-tip__note');
@@ -256,6 +271,23 @@ export function buildViewerTooltip(model) {
     list.appendChild(row(t(model.engagement.measurable ? 'tip.viewer.er' : 'tip.viewer.erProvisional'),
       formatPercent(model.engagement.percent, locale)));
   }
+  const baseline = model.erBaseline;
+  if (baseline) {
+    const percent = (value) => formatPercent(value, locale);
+    if (baseline.sessions >= 5 && Number.isFinite(baseline.low) && Number.isFinite(baseline.high)) {
+      list.appendChild(row(t('tip.history.typical'), t('tip.history.range', {
+        median: percent(baseline.er), low: percent(baseline.low),
+        high: percent(baseline.high), count: baseline.sessions,
+      })));
+      if (!model.stale && model.engagement?.measurable) {
+        const value = model.engagement.percent;
+        const relation = value < baseline.low ? 'low' : value > baseline.high ? 'high' : 'normal';
+        list.appendChild(row(t('tip.history.relation'), t('tip.history.' + relation)));
+      }
+    } else {
+      list.appendChild(row(t('tip.history.previous'), percent(baseline.lastEr ?? baseline.er)));
+    }
+  }
   const elapsed = Math.floor((model.observationMs ?? model.sessionMs ?? 0) / 60000);
   const covered = Math.min(10, Math.floor((model.sessionMs ?? 0) / 60000));
   const duration = elapsed >= 60
@@ -268,6 +300,11 @@ export function buildViewerTooltip(model) {
     list.appendChild(row(t('tip.viewer.window'), t(
       covered === 10 ? 'tip.sliding' : 'tip.covered', { minutes: covered }
     )));
+  }
+  if (!model.stale && Number.isFinite(model.viewerCoverageMs) && model.viewerCoverageMs < 600000) {
+    list.appendChild(row(t('tip.coverage.viewer'), t('tip.covered', {
+      minutes: Math.floor(model.viewerCoverageMs / 60000),
+    })));
   }
   if (!model.stale && model.chatAlert && model.activeUsers) {
     list.appendChild(row(t('tip.chatAlertLabel'), t('tip.chatAlertValue', {

@@ -414,6 +414,7 @@ export function buildViewerModel(input) {
     erBaseline:
       baseline && Number.isFinite(baseline.er)
         ? {
+            ...baseline,
             er: baseline.er,
             sessions: Math.max(0, Number(baseline.sessions) || 0),
             threshold: Number(baseline.threshold) || 0,

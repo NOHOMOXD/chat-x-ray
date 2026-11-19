@@ -34,8 +34,9 @@ async function launchWithExtension(browserName) {
   if (browserName === 'chromium') {
     const { chromium } = await import('@playwright/test');
     return chromium.launchPersistentContext('', {
-      channel: 'chromium',
-      headless: true,
+      ...(process.env.TCX_OPERA_EXECUTABLE
+        ? { executablePath: process.env.TCX_OPERA_EXECUTABLE, headless: false }
+        : { channel: 'chromium', headless: true }),
       args: [
         `--disable-extensions-except=${path.join(DIST, 'chrome')}`,
         `--load-extension=${path.join(DIST, 'chrome')}`,

@@ -76,7 +76,7 @@ import {
     });
 
     if (thresholdOutput) {
-      thresholdOutput.textContent = settings.suspiciousThreshold + '%';
+      thresholdOutput.textContent = settings.suspiciousThreshold + '/100';
     }
 
     if (languageSelect) {
@@ -125,7 +125,7 @@ import {
     if (input.type === 'range') {
       input.addEventListener('input', () => {
         if (thresholdOutput) {
-          thresholdOutput.textContent = input.value + '%';
+          thresholdOutput.textContent = input.value + '/100';
         }
       });
       input.addEventListener('change', commit);

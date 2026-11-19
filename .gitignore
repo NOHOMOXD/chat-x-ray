@@ -20,6 +20,10 @@ blob-report/
 
 # Raw capture dumps contain public nicknames - never commit them
 *.jsonl
+/testing_logs/
+/tools/audit-aggregate.json
+twitch-xray-audit-*.json
+twitch-xray-session-*.json
 
 # OS / editor noise
 .DS_Store

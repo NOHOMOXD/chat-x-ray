@@ -2,7 +2,7 @@
 
 A local-only browser extension (Manifest V3) that reads the Twitch chat you
 already have open and tells you who in it looks like a bot. Chrome, Edge, Opera
-and Firefox. RU / EN.
+Firefox and Safari on Mac. RU / EN.
 
 Nothing leaves the tab: no servers, no accounts, no analytics.
 
@@ -10,7 +10,7 @@ Nothing leaves the tab: no servers, no accounts, no analytics.
 
 ## What it does
 
-- **Bot badges.** Each suspicious account gets a `BOT 65%` chip before the
+- **Bot badges.** Each suspicious account gets a `65 out of 100` chip before the
   nickname, colour-graded from gold to red. Hover for the exact signals.
 - **Adaptive R9K.** Catches pastes, near-duplicates and character floods across
   a 15-minute window, optionally muting or hiding them.
@@ -36,7 +36,7 @@ npm install
 npm run build:all
 ```
 
-**Chrome / Edge / Opera** — `chrome://extensions` → enable *Developer mode* →
+**Chrome / Edge / Opera** — open the browser’s extensions page (Opera uses `opera://extensions`) → enable *Developer mode* →
 *Load unpacked* → `dist/chrome`.
 
 **Firefox 140+** — `about:debugging#/runtime/this-firefox` → *Load Temporary
@@ -54,7 +54,7 @@ Open Twitch's own **Chat Settings** (the gear under chat). A **"Chat X-Ray
 Settings"** row sits at the bottom, like BetterTTV's. There is also a gear button
 in the chat header.
 
-Everything is there: badge visibility, threshold (default **30%**), muting or
+Everything is there: badge visibility, threshold (default **30 points**), muting or
 hiding, client-side R9K, the stats strip, the viewer counter, the audit log,
 the opt-in account-age lookup, and the interface language.
 
@@ -87,3 +87,5 @@ Layout, scripts and testing notes: **[docs/development.md](docs/development.md)*
 ## License
 
 MIT — see [LICENSE](LICENSE). Bundled third-party code: [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
+
+Version 1.0 adds local broadcast history, interruption coverage and group recurrence. See [distribution](docs/distribution.md) for Safari on Mac and GitHub releases.

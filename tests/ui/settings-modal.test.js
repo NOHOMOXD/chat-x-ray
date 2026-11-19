@@ -223,7 +223,7 @@ describe('modal fields', () => {
     }
   });
 
-  it('starts the threshold slider at 30%', () => {
+  it('starts the threshold slider at 30 points', () => {
     const harness = makeModal();
     harness.modal.openModal();
     const range = document.querySelector('[data-tcx-setting="suspiciousThreshold"]');
@@ -251,7 +251,7 @@ describe('modal fields', () => {
     range.value = '60';
     range.dispatchEvent(new Event('input', { bubbles: true }));
     expect(harness.settings.suspiciousThreshold).toBe(60);
-    expect(document.querySelector('[data-tcx-output="threshold"]').textContent).toBe('60%');
+    expect(document.querySelector('[data-tcx-output="threshold"]').textContent).toBe('60/100');
 
     range.dispatchEvent(new Event('change', { bubbles: true }));
     expect(harness.commits).toHaveLength(1);

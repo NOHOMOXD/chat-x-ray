@@ -33,7 +33,7 @@ A confirmed age below 90 days adds 10 points for eligible empty profiles.
 Unknown age and ages of 90 days or more contribute zero points.
 Older exports may contain a negative `veteran-account` trigger.
 
-Default threshold: **30%**. A plain unbadged account with the default colour
+Default threshold: **30 points**. A plain unbadged account with the default colour
 scores 25 and stays below that line, because many ordinary viewers never pick
 a badge or a colour. A second signal adds at least 5 points and crosses it.
 
@@ -62,8 +62,21 @@ window crosses it.
   ER divides eligible authors by the current Twitch count. The existing 2.5%
   warning at 1,000+ viewers and 6% informational band are heuristic thresholds.
 
-The local ER baseline starts fresh after the change to eligible authors.
-Thirty-second samples enter the baseline only after a complete chat window.
+Broadcast history begins after a confirmed stream ID or an absolute start
+time. A comparable ER sample requires ten continuous minutes of chat and
+viewer counts. The first complete sample is saved immediately. The extension
+keeps up to one ER sample per minute and uses one median per broadcast, with
+up to 20 recent broadcasts under each channel. The threshold, account-age
+setting and scoring version determine comparison eligibility. The previous
+broadcast is shown once available. With five or more, the UI shows the median
+and interquartile range. The active broadcast contributes starting with the
+next broadcast. The previous tab-session baseline lacks a broadcast ID and
+is excluded from these comparisons.
+
+Chat and viewer coverage are accumulated independently. Overlapping intervals
+are merged and missing time contributes zero. The live ten-minute comparison
+requires continuous coverage after a break. The export includes coverage
+intervals and the saved broadcast event journal alongside the tab recording.
 
 ## Viewer count anomalies
 
@@ -152,3 +165,7 @@ weight for membership in a dense group. Both branches use the confirmed age
 rule. The comparison measures score and viewer range sensitivity. Reviewers
 can sample changed authors with the score concealed and label coordination
 as likely, unlikely, or unclear using the available chat context.
+
+Across broadcasts, group diagnostics track repeated ID bands, repeated members
+and the same members sharing a rarely used phrase. Only the exported experiment
+applies the five-point recurrence adjustment.

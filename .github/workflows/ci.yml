@@ -4,38 +4,28 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - run: npm ci
-
-      - name: Unit and DOM tests
+      - name: Unit, DOM and localization tests
         run: npm test
-
-      - name: Build Chrome and Firefox targets
+      - name: Build browser targets
         run: npm run build:all
-
-      - name: Lint the Firefox build
+      - name: Lint Firefox
         run: npm run lint:firefox
-
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
+      - name: Install Playwright Chromium and Firefox
+        run: npx playwright install --with-deps chromium firefox
       - name: Extension E2E
-        run: npm run test:e2e -- --project=chrome
-
-      - name: Upload store packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: packages
-          path: dist/
-          retention-days: 14
+        run: npm run test:e2e

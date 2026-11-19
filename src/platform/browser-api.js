@@ -28,7 +28,17 @@ function apiGlobal() {
 export function getStorageArea() {
   const api = apiGlobal();
   try {
-    return api && api.storage && api.storage.local ? api.storage.local : null;
+    const area = api?.storage?.local;
+    if (!area) return null;
+    if (api === globalScope.browser) {
+      // The promise-based namespace rejects the callback argument used by
+      // callStorage. Wrap its methods without passing that argument through.
+      return {
+        get: (key) => area.get(key),
+        set: (items) => area.set(items),
+      };
+    }
+    return area;
   } catch (_error) {
     return null;
   }

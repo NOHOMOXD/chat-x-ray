@@ -25,9 +25,9 @@ import {
   setAttributeIfChanged,
   setTextIfChanged,
 } from '../shared/ui-utils.js';
+import { broadcastProfile } from '../../analysis/broadcast-history.js';
 import { buildViewerModel } from '../../analysis/viewer-estimate.js';
 import { ViewerHistory } from '../../analysis/viewer-history.js';
-import { ErSessionTracker } from '../../analysis/er-baseline.js';
 import {
   buildViewerTooltip,
   tooltipController,
@@ -188,10 +188,11 @@ export class ViewerCounterAdjuster {
     this.history = new ViewerHistory(
       Object.assign({ warmupMs: 8000 }, options.viewerHistory || {})
     );
-    this.baselineStore = options.baselineStore || null;
+    this.getBaseline = options.getBaseline || (() => null);
+    this.isPaused = options.isPaused || (() => false);
+    this.onMissing = options.onMissing || (() => {});
     this.channel = String(options.channel || '').toLowerCase();
     this.threshold = 0;
-    this.tracker = null;
     this.settleMs = Number(options.settleMs) || 8000;
     this.settleUntil = 0;
     this.el = null;
@@ -224,12 +225,14 @@ export class ViewerCounterAdjuster {
 
     const target = this._findViewerCountElement();
     if (!target) {
+      this.onMissing(now);
       this.showLastMeasurement(settings, now);
       return;
     }
 
     const twitchViewers = parseTwitchViewerCount(target.textContent || '');
     if (twitchViewers === null) {
+      this.onMissing(now);
       this.showLastMeasurement(settings, now);
       return;
     }
@@ -238,16 +241,10 @@ export class ViewerCounterAdjuster {
     // bounded timeline and finds drop-and-refill cycles.
     const stats = this.getStats(now);
     const threshold = Number(settings.suspiciousThreshold) || 0;
-    if (!this.tracker || this.tracker.threshold !== threshold) {
-      this.finishTracker(now);
-      this.tracker = this.baselineStore
-        ? new ErSessionTracker({
-            channel: this.channel,
-            threshold,
-            store: this.baselineStore,
-          })
-        : null;
-      this.threshold = threshold;
+    this.threshold = threshold;
+    if (this.isPaused()) {
+      this.showLastMeasurement(settings, now);
+      return;
     }
 
     const accepted = this.history.record(twitchViewers, now, {
@@ -257,21 +254,16 @@ export class ViewerCounterAdjuster {
     if (accepted) {
       this.onSample?.(accepted);
     }
-    if (this.tracker && stats.sessionMs >= 600000) {
-      this.tracker.observe(
-        twitchViewers,
-        stats.cleanUsers,
-        stats.sessionMs,
-        now
-      );
+    if (stats.chatConnected === false && (this.lastModel?.chatConnected || this.lastModel?.engagement?.measurable)) {
+      this.showLastMeasurement(settings, now);
+      return;
     }
-
     const modelInput = {
       official: twitchViewers,
       minute: this.getMinute(now, this.history.samples, stats),
       stats,
       history: this.history.getStats(now),
-      baseline: this.tracker ? this.tracker.getBaseline() : null,
+      baseline: this.getBaseline(),
     };
     const model = buildViewerModel(modelInput);
 
@@ -280,9 +272,12 @@ export class ViewerCounterAdjuster {
       return;
     }
     model.threshold = threshold;
+    model.historyProfile = broadcastProfile(settings);
+    model.chatConnected = stats.chatConnected !== false;
     model.sampledAt = now;
     model.input = modelInput;
     model.observationMs = stats.observationMs;
+    model.viewerCoverageMs = stats.viewerCoverageMs;
     model.chatAlert = stats.chatConnected !== false && (stats.waveAlert ||
       (stats.suspiciousShare > 0 && stats.suspiciousShare * 100 >= threshold));
     model.viewerStatus = model.churn.lastAnomaly &&
@@ -322,31 +317,14 @@ export class ViewerCounterAdjuster {
     }
   }
 
-  finishTracker(now) {
-    if (this.tracker) {
-      this.tracker.finish(now);
-      this.tracker = null;
-    }
-  }
-
-  /**
-   * Channel change: persist the finished session's ER baseline, drop the old
-   * viewer timeline and wait for Twitch to render the new channel.
-   */
   reset(channel) {
     if (channel !== undefined) {
       this.channel = String(channel || '').toLowerCase();
     }
-    this.finishTracker(Date.now());
     this.remove();
     this.history.reset();
     this.lastModel = null;
     this.settleUntil = Date.now() + this.settleMs;
-  }
-
-  /** Called on pagehide so a closed tab still contributes its ER baseline. */
-  finish() {
-    this.finishTracker(Date.now());
   }
 
   remove() {

@@ -149,7 +149,7 @@ export class MessageRow {
     const wave = isWaveRecord(this.record);
     const groupOnly = score < threshold;
 
-    setTextIfChanged(badge, groupOnly ? 'ID' : `BOT ${score}%`);
+    setTextIfChanged(badge, groupOnly ? 'ID' : t('tip.badge.points', { score }));
     badge.classList.toggle('tcx-bot-badge--id-group', groupOnly);
     badge.dataset.tcxScore = String(score);
     badge.style.setProperty('--tcx-bot-hue', String(hue));
@@ -179,6 +179,8 @@ export class MessageRow {
           spamFlood: this.record.spamFlood,
           accountAgeDays: this.record.accountAgeDays,
           idGroup: this.settings.getIdGroup?.(this.record.numericUserId),
+          groupHistory: this.settings.getGroupHistory?.(this.record.numericUserId),
+          observedBroadcasts: this.settings.observedBroadcasts,
           groupOnly: this.record.botScore < this.settings.suspiciousThreshold,
           r9kSimilarity: this.record.r9kSimilarity,
           roleExempt: this.record.roleExempt,

@@ -176,3 +176,22 @@ describe('viewer outflows', () => {
     });
   });
 });
+
+
+it('restores journal totals idempotently and treats a saved open outflow as interrupted', () => {
+  const history = new ViewerHistory();
+  const base = 1795082799300;
+  const journal = [
+    { kind: 'surge', ts: base, from: 10000, to: 13000, delta: 3000 },
+    { kind: 'churn', ts: base + 10000, from: 13000, to: 10000, durationMs: 5000, delta: -3000 },
+    { kind: 'viewer-outflow', ts: base + 20000, from: 12000, to: 9000, status: 'observing', delta: -3000 },
+  ];
+  history.restoreEvents(journal);
+  history.restoreEvents(journal);
+  expect(history.getStats(base + 20000)).toMatchObject({
+    totalSurges: 1, totalChurnEvents: 1, churnRecent: 1, totalOutflows: 1,
+    lastOutflow: { status: 'interrupted' }, pendingDrop: null,
+  });
+  history.record(20000, base + 50000);
+  expect(history.getStats(base + 50000)).toMatchObject({ totalSurges: 1 });
+});

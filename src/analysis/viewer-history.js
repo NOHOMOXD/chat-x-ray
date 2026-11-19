@@ -91,6 +91,38 @@ export class ViewerHistory {
     this.totalMaxDrop = 0;
   }
 
+  restoreEvents(events) {
+    const collected = (kind) => events.filter((event) => event.kind === kind)
+      .sort((a, b) => a.ts - b.ts);
+    const surges = collected('surge');
+    const drops = collected('viewer-outflow');
+    const churns = collected('churn');
+    this.totalSurges = surges.length;
+    this.surgeSum = surges.reduce((sum, event) => sum + event.delta, 0);
+    this.lastSurge = surges.at(-1) ?? null;
+    this.lastSurgeAt = this.lastSurge?.ts ?? this.lastSurgeAt;
+
+    this.totalOutflows = drops.length;
+    const drop = drops.at(-1);
+    const active = this.dropState?.event;
+    const locallyObserved = active && drop?.from === active.from && Math.abs(drop.ts - active.ts) <= 15000;
+    this.lastOutflow = drop?.status === 'observing' && !locallyObserved
+      ? { ...drop, status: 'interrupted' } : drop ?? null;
+
+    this.totalChurnEvents = churns.length;
+    this.totalDropSum = churns.reduce((sum, event) => sum - event.delta, 0);
+    this.totalMaxDrop = churns.reduce((max, event) => Math.max(max, -event.delta), 0);
+    const local = new Map(this.churnEvents.map((event) => [event.recoveredAt, event]));
+    this.churnEvents = churns.map((event) => local.get(event.ts) ?? {
+      from: event.from, low: event.to, drop: -event.delta,
+      startedAt: event.ts - event.durationMs, recoveredAt: event.ts,
+      durationMs: event.durationMs,
+    });
+    this.lastChurn = this.churnEvents.at(-1) ?? null;
+    this.lastAnomaly = [this.lastSurge, churns.at(-1)].filter(Boolean)
+      .sort((a, b) => a.ts - b.ts).at(-1) ?? null;
+  }
+
   /**
    * Feed one parsed official viewer count. Samples are coalesced while the
    * number is unchanged, so a 15-minute history stays small.

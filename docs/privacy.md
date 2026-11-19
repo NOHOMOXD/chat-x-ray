@@ -4,12 +4,16 @@ The extension is **local-only**.
 
 - **No network requests by default.** Tippy.js is bundled; no fonts, analytics
   or update pings.
-- **Only the `storage` permission** is requested. No host permissions, no
-  background worker.
-- Messages, scores and the audit log live **in tab memory** and disappear when
-  the tab closes.
-- `chrome.storage.local` holds only: your settings and the per-channel ER
-  baseline (`channel|threshold` → up to 5 recent sessions).
+- **Only the `storage` permission** is requested. An extension background worker serializes local history writes from open tabs.
+- Raw messages and the tab audit buffer live in memory. A downloaded JSON file
+  contains the evidence selected for that export.
+- Extension-local storage holds settings and broadcast history, including
+  coverage intervals, ER, saved measurements, event totals and group ID
+  membership with phrase fingerprints. The store keeps up to 20 broadcasts
+  per channel under a shared size limit. Use **Clear broadcast history** in the
+  Twitch settings panel to clear those records on this browser profile.
+- Stream identity can use Twitch metadata which the page already requested.
+  The extension does not issue a separate request for broadcast history.
 - The only optional network call is the **account-age lookup**
   (`accountAgeLookup`, off by default): a POST to `gql.twitch.tv` asking for
   `user.createdAt` of accounts that already look suspicious. It is an

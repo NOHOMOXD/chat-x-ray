@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>Chat X-Ray E2E fixture — settings popover with third parties</title>
+    <style>
+      body { background: #18181b; color: #efeff1; font-family: system-ui; margin: 0; }
+      .stream-chat { width: 420px; margin: 20px; }
+      .bttv-chat-settings { padding: 8px; }
+      .seventv-settings { padding: 8px; }
+    </style>
+  </head>
+  <body>
+    <!-- A faithful copy of the Chat Settings balloon as captured from a live
+         page with BetterTTV installed. Note the nesting: Twitch's own rows sit
+         inside a wrapper div, and BetterTTV appends itself *into that same
+         wrapper* — so "the container" the extension resolves is the wrapper,
+         not .chat-settings__content. That is the structure our row must
+         tolerate. -->
+    <button data-a-target="chat-settings" id="gear">gear</button>
+
+    <div data-a-target="chat-settings-balloon">
+      <div class="chat-settings__popover">
+        <div class="chat-settings__header">
+          <p class="tw-title">Chat Settings</p>
+        </div>
+        <div class="scrollable-area">
+          <div class="Layout-sc-1xcs6mc-0 buoAEw chat-settings__content">
+            <div class="Layout-sc-1xcs6mc-0">
+              <div class="Layout-sc-1xcs6mc-0"><p>My Preferences</p></div>
+              <div class="Layout-sc-1xcs6mc-0">
+                <button data-test-selector="chat-filter-item-click-target">
+                  <div>Chat Filters</div>
+                </button>
+              </div>
+              <div class="Layout-sc-1xcs6mc-0">
+                <button data-a-target="hide-chat-button"><div>Hide Chat</div></button>
+              </div>
+              <div class="Layout-sc-1xcs6mc-0">
+                <button data-a-target="popout-chat-button"><div>Popout Chat</div></button>
+              </div>
+            </div>
+            <div class="bttv-chat-settings">
+              <div class="settingHeader"><p>BetterTTV</p></div>
+              <div class="settingRow"><button class="settingButton">Set Font</button></div>
+              <div class="settingRow"><button class="settingButton">BetterTTV Settings</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 7TV mounts later, after our row already exists. This is the ordering
+      // that a naive "insert after the first block" handles badly.
+      window.__fixture = {
+        mount7TV: function () {
+          var content = document.querySelector('.chat-settings__content');
+          if (content.querySelector('.seventv-settings')) {
+            return true;
+          }
+          var seventv = document.createElement('div');
+          seventv.className = 'seventv-settings';
+          seventv.innerHTML =
+            '<div class="settingHeader"><p>7TV</p></div>' +
+            '<div class="settingRow"><button>7TV Settings</button></div>';
+          content.appendChild(seventv);
+          return true;
+        },
+        thirdPartyState: function () {
+          var content = document.querySelector('.chat-settings__content');
+          return {
+            bttv: Boolean(content.querySelector('.bttv-chat-settings')),
+            seventv: Boolean(content.querySelector('.seventv-settings')),
+          };
+        },
+      };
+    </script>
+  </body>
+</html>

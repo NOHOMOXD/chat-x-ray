@@ -3,8 +3,8 @@
 ## Setup
 
 ```bash
-npm install
-npm run build:all     # dist/chrome + dist/firefox
+npm ci
+npm run build:all     # dist/chrome + dist/firefox + dist/safari
 ```
 
 Node 20+ required.
@@ -32,9 +32,9 @@ Node 20+ required.
 | `npm run test:watch` | Same, in watch mode |
 | `npm run test:coverage` | With a V8 coverage report |
 | `npm run build` | Chrome build only |
-| `npm run build:all` | Chrome + Firefox builds |
+| `npm run build:all` | Chromium, Firefox and Safari extension resources |
 | `npm run dev` | Rebuild on change |
-| `npm run test:e2e` | Loads the real build in Chromium (Playwright) |
+| `npm run test:e2e` | Loads the real build in Chromium and Firefox (Playwright) |
 | `npm run lint:firefox` | `web-ext lint` against the Firefox build |
 | `npm run verify` | Everything above, in CI order |
 | `npm run package` | Store-ready zips in `release/` |
@@ -42,7 +42,7 @@ Node 20+ required.
 Playwright's bundled browsers install on demand:
 
 ```bash
-npx playwright install chromium
+npx playwright install chromium firefox
 ```
 
 ## Project layout
@@ -78,3 +78,5 @@ Twitch-shaped fixture.
   **forged** message without the bridge token is ignored.
 - Google Chrome removed `--load-extension`, so E2E uses Playwright's bundled
   Chromium.
+
+For Safari on Mac, use full Xcode and `npm run package:safari`. See [distribution](distribution.md).

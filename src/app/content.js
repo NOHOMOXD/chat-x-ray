@@ -25,7 +25,13 @@ import {
 } from '../config/settings.js';
 import { ViewerCounterAdjuster } from '../ui/chat/viewer-counter.js';
 import { AccountAgeService } from '../platform/account-age.js';
-import { ErBaselineStore } from '../analysis/er-baseline.js';
+import { HISTORY_CLEAR_KEY, broadcastProfile, checkpointMerge } from '../analysis/broadcast-history.js';
+import { createBroadcastHistoryClient } from '../platform/broadcast-history-client.js';
+import { onStorageChanged } from '../platform/browser-api.js';
+import { broadcastIdentity, normalizeBroadcast } from '../platform/broadcast-identity.js';
+import { coveredDuration, MAX_OBSERVATION_GAP, ObservationClock } from '../analysis/observation-clock.js';
+import { describeGroups, findIdGroups, recordsAt } from '../core/id-group-diagnostics.js';
+import { analyzeGroupRecurrence, buildGroupObservation, compareHistoricalGroupScores } from '../analysis/group-history.js';
 import { isExtensionMutation } from '../ui/shared/ui-utils.js';
 import { resolveLocale, setLocale } from '../i18n/i18n.js';
 
@@ -194,7 +200,13 @@ export class ChatXRayApp {
     this.urlLagChannel = '';
     this.channelChangedAt = Date.now();
     this.lastMessageChannel = '';
-    this.erBaselineStore = new ErBaselineStore();
+    this.broadcastHistory = createBroadcastHistoryClient();
+    this.knownBroadcasts = new Map();
+    this.pendingBroadcast = Promise.resolve();
+    this.historyClearedAt = 0;
+    this.tabOpenedAt = Date.now();
+    this.resetObservation();
+    this.frozen = false;
     this.container = null;
     this.pageObserver = null;
     this.bindScheduled = false;
@@ -203,7 +215,9 @@ export class ChatXRayApp {
     this.bridgeToken = createBridgeToken();
 
     this.binder = new MessageBinder({
-      getSettings: () => ({ ...this.settings, getIdGroup: (id) => this.analyzer.idGroupsById.get(id) }),
+      getSettings: () => ({ ...this.settings, getIdGroup: (id) => this.analyzer.idGroupsById.get(id),
+        getGroupHistory: (id) => this.groupRecurrence?.authors[id],
+        observedBroadcasts: this.groupRecurrence?.observedBroadcasts }),
     });
     this.statsView = new StatsView({
       getStats: () => this.getViewerStats(),
@@ -215,14 +229,18 @@ export class ChatXRayApp {
       countMessages: (from, to) => this.countMessages(from, to),
       onSample: (accepted) => this.recordViewerSample(accepted),
       onModel: (model) => this.capture?.recordModel(model),
+      onMissing: () => this.interruptViewer('viewer-missing'),
+      isPaused: () => this.frozen,
+      getBaseline: () => this.broadcastData?.profile === broadcastProfile(this.settings)
+        ? this.broadcastData.baseline : null,
       getSettings: () => this.settings,
       channel: this.channel,
-      baselineStore: this.erBaselineStore,
     });
     this.settingsPanel = new SettingsModal({
       getSettings: () => this.settings,
       getLogger: () => this.analyzer.logger,
       downloadSession: (previous) => this.downloadSession(previous),
+      clearHistory: () => this.clearHistory(),
       onPreview: (next) => this.applySettings(next, false),
       onCommit: (next) => this.applySettings(next, true),
     });
@@ -248,6 +266,11 @@ export class ChatXRayApp {
     window.addEventListener(HANDSHAKE_EVENT + ':request', () => this.announceBridge());
     this.announceBridge();
     this.settingsRepository.subscribe(this.handleStorageChange);
+    onStorageChanged((changes, area) => {
+      if (area === 'local' && changes[HISTORY_CLEAR_KEY]) {
+        this.onHistoryCleared(changes[HISTORY_CLEAR_KEY].newValue);
+      }
+    });
 
     this.settingsRepository.load().then((settings) => {
       this.settings = settings;
@@ -279,13 +302,18 @@ export class ChatXRayApp {
     // URL change before Twitch's old viewer count can contaminate the new
     // channel's history. The 1 s maintenance loop stays for DOM work.
     window.setInterval(() => this.handleNavigation(), 250);
-    document.addEventListener('freeze', () => this.interruptObservation('freeze'));
-    window.addEventListener('pagehide', () => {
-      this.viewerCounter.finish();
-      this.erBaselineStore.flush();
+    document.addEventListener('freeze', () => {
+      this.frozen = true;
+      this.interruptObservation('freeze');
     });
-    this.erBaselineStore.load().then(() => {
-      this.viewerCounter.update(this.channel);
+    document.addEventListener('resume', () => {
+      this.frozen = false;
+      this.maintenance();
+    });
+    window.addEventListener('pagehide', () => this.interruptObservation('pagehide'));
+    window.addEventListener('pageshow', () => {
+      this.frozen = false;
+      this.maintenance();
     });
 
     window.setInterval(() => this.maintenance(), 1000);
@@ -358,6 +386,15 @@ export class ChatXRayApp {
     let waveTriggered = false;
     for (let i = 0; i < data.messages.length; i += 1) {
       const message = data.messages[i];
+      if (message?.kind === 'broadcast-identity') {
+        const identity = normalizeBroadcast(message.channel, message.id, message.startedAt);
+        if (!identity) continue;
+        this.knownBroadcasts.delete(identity.channel);
+        this.knownBroadcasts.set(identity.channel, { identity, seenAt: Date.now() });
+        if (this.knownBroadcasts.size > 16) this.knownBroadcasts.delete(this.knownBroadcasts.keys().next().value);
+        if (identity.channel === this.channel) this.setBroadcast(identity);
+        continue;
+      }
       if (message?.kind === 'socket-open' || message?.kind === 'socket-close') {
         if (!Number.isSafeInteger(message.socketId)) {
           continue;
@@ -367,13 +404,14 @@ export class ChatXRayApp {
           this.chatSince ??= Date.now();
         } else if (this.openSockets.delete(message.socketId) && !this.openSockets.size) {
           this.interruptChat('irc-close');
+          this.syncBroadcast(true);
         }
         continue;
       }
       if (message?.kind === 'raid') {
         if (message.channel === this.channel && typeof message.id === 'string' &&
             Number.isFinite(message.ts) && this.viewerCounter.history.recordRaid(message)) {
-          this.capture?.events.push(message);
+          this.recordEvent(message);
         }
         continue;
       }
@@ -424,12 +462,13 @@ export class ChatXRayApp {
       this.accountAgeService.maybeLookup(record.login, record.botScore,
         eligibleForFreshPoints ? WEIGHTS.freshAccount : 0);
       if (result.waveTriggered) {
-        this.capture?.events.push(result.waveEvent);
+        this.recordEvent(result.waveEvent);
         waveTriggered = true;
       }
     }
 
     if (waveTriggered) {
+      this.syncBroadcast(true);
       this.binder.refresh();
     }
     this.scheduleBind();
@@ -563,6 +602,7 @@ export class ChatXRayApp {
   }
 
   resetChannel(channel, fromMessage) {
+    this.syncBroadcast(true);
     if (channel && channel !== this.channel) {
       this.previousChannel = this.channel;
     }
@@ -576,9 +616,12 @@ export class ChatXRayApp {
     this.chatSince = this.openSockets.size && channel ? Date.now() : null;
     this.lastViewerSample = null;
     this.viewerGap = false;
+    this.resetObservation();
     this.analyzer.reset();
     this.accountAgeService.resetQueue();
     this.channel = channel;
+    const known = this.knownBroadcasts.get(channel);
+    if (known && Date.now() - known.seenAt <= MAX_OBSERVATION_GAP) this.setBroadcast(known.identity);
     this.channelChangedAt = Date.now();
     this.binder.reset();
     this.statsView.remove();
@@ -616,9 +659,22 @@ export class ChatXRayApp {
   }
 
   getViewerStats(now = Date.now()) {
+    const stats = this.analyzer.getStats(now, this.chatSince ?? now);
+    const persistedWaves = this.broadcastData?.checkpoint?.events || [];
+    const waves = new Map();
+    for (const event of [...persistedWaves, ...this.observedEvents]) {
+      if (event.kind === 'chat-wave') waves.set(event.bucketStart, event);
+    }
     return {
-      ...this.analyzer.getStats(now, this.chatSince ?? now),
-      observationMs: Math.max(0, now - this.channelChangedAt),
+      ...stats,
+      waveCount: Math.max(stats.waveCount, waves.size),
+      lastWave: stats.lastWave ?? [...waves.values()].at(-1),
+      observationMs: coveredDuration([
+        ...(this.broadcastData?.checkpoint?.intervals?.chat || []), ...this.chatClock.snapshot(),
+      ]),
+      tabMs: Math.max(0, now - this.channelChangedAt),
+      viewerCoverageMs: this.viewerClock.since === null ? 0 :
+        Math.max(0, this.viewerClock.last - this.viewerClock.since),
       chatConnected: this.chatSince !== null,
     };
   }
@@ -646,45 +702,197 @@ export class ChatXRayApp {
     };
   }
 
+  resetObservation() {
+    this.broadcast = null;
+    this.restoredBroadcast = null;
+    this.broadcastData = null;
+    this.groupRecurrence = null;
+    this.latestGroupWindow = null;
+    this.hasCompleteObservation = false;
+    this.lastCheckpoint = -Infinity;
+    this.chatClock = new ObservationClock();
+    this.viewerClock = new ObservationClock();
+    this.observedEvents = [];
+  }
+
+  recordEvent(event) {
+    this.observedEvents.push(event);
+    this.capture?.events.push(event);
+  }
+
+  setBroadcast(identity) {
+    const normalized = normalizeBroadcast(identity.channel, identity.id, identity.startedAt);
+    if (!normalized || normalized.channel !== this.channel) return;
+    const { id, startedAt } = normalized;
+    const previous = this.broadcast;
+    if (startedAt && previous?.startedAt && startedAt < previous.startedAt) return;
+    if (previous?.id && id === previous.id && (previous.startedAt || !startedAt)) return;
+    if (!id && previous && (!previous.startedAt || previous.startedAt === startedAt)) return;
+    const changed = previous && ((id && previous.id && id !== previous.id) ||
+      (startedAt && previous.startedAt && startedAt !== previous.startedAt));
+    if (changed) this.resetChannel(normalized.channel);
+
+    this.broadcast = { ...normalized, id: normalized.id ?? (changed ? null : previous?.id),
+      startedAt: normalized.startedAt ?? (changed ? null : previous?.startedAt),
+      firstObservedAt: this.broadcast?.firstObservedAt ?? Date.now() };
+    this.broadcastData = null;
+    this.lastCheckpoint = -Infinity;
+  }
+
+  async clearHistory() {
+    this.clearingHistory = true;
+    try {
+      await this.pendingBroadcast;
+      this.onHistoryCleared(await this.broadcastHistory.clear());
+    } finally {
+      this.clearingHistory = false;
+    }
+  }
+
+  onHistoryCleared(ts) {
+    if (!Number.isFinite(ts) || ts <= this.historyClearedAt) return;
+    this.historyClearedAt = ts;
+    if (ts < this.tabOpenedAt) return;
+    this.broadcastData = null;
+    this.groupRecurrence = null;
+    this.latestGroupWindow = null;
+    this.hasCompleteObservation = false;
+    this.observedEvents = this.observedEvents.filter((event) => event.ts > ts);
+    this.chatClock = new ObservationClock();
+    this.viewerClock = new ObservationClock();
+    this.chatSince = this.chatSince === null ? null : Math.max(this.chatSince, ts);
+    this.viewerCounter.history.reset();
+    this.viewerCounter.lastModel = null;
+    this.lastViewerSample = null;
+    this.viewerGap = false;
+    this.analyzer.waveCount = 0;
+    this.analyzer.lastWave = null;
+    this.lastCheckpoint = Date.now();
+    this.binder.refresh();
+  }
+
+  syncBroadcast(force = false, now = Date.now()) {
+    const identity = this.broadcast;
+    if (!identity || this.clearingHistory) return;
+    const settings = this.settings;
+    const clearingGeneration = this.historyClearedAt;
+    const profile = broadcastProfile(settings);
+    const initial = this.broadcastProfile !== profile || this.lastCheckpoint === -Infinity;
+    this.broadcastProfile = profile;
+    const model = this.viewerCounter.lastModel;
+    const compatibleModel = model?.historyProfile === profile && model.chatConnected;
+    const complete = compatibleModel && model.engagement?.measurable &&
+      this.chatClock.since !== null && now - this.chatClock.since >= 600000 &&
+      this.viewerClock.since !== null && now - this.viewerClock.since >= 600000 &&
+      now - model.sampledAt <= 6000;
+    const firstFull = complete && (!this.hasCompleteObservation || initial);
+    if (!force && !initial && !firstFull && now - this.lastCheckpoint < 60000) return;
+    this.hasCompleteObservation = (this.hasCompleteObservation && !initial) || complete;
+    this.lastCheckpoint = now;
+    const records = recordsAt(this.analyzer.session.records, now)
+      .filter((record) => record.ts > this.historyClearedAt);
+    const currentGroups = this.chatSince === null ? null : {
+      groups: describeGroups(findIdGroups(records), records, true),
+    };
+    const update = {
+      intervals: { chat: this.chatClock.snapshot(), viewer: this.viewerClock.snapshot() },
+      samples: complete ? [{ ts: now, er: model.engagement.percent }] : [],
+      events: structuredClone(this.observedEvents.map(({ atTrigger, ...event }) => event)),
+      groups: [],
+      lastViewerModel: compatibleModel ? { ...model, input: undefined } : null,
+    };
+    this.pendingBroadcast = this.pendingBroadcast.then(async () => {
+      if (currentGroups) update.groups.push(await buildGroupObservation(currentGroups, { ts: now }));
+      const data = await this.broadcastHistory.save(identity, settings, update);
+      this.onHistoryCleared(data.clearedAt);
+      if (identity !== this.broadcast || profile !== broadcastProfile(this.settings) ||
+          (this.historyClearedAt !== clearingGeneration && this.historyClearedAt >= this.tabOpenedAt)) return;
+      if (data.checkpoint) {
+        const checkpoint = checkpointMerge(data.checkpoint, { events: this.observedEvents });
+        this.viewerCounter.history.restoreEvents(checkpoint.events);
+        const saved = checkpoint.lastViewerModel;
+        const live = this.viewerCounter.lastModel;
+        if (this.restoredBroadcast !== identity && saved?.historyProfile === profile &&
+            (!live || saved.sampledAt > live.sampledAt ||
+              (saved.engagement?.measurable && !live.engagement?.measurable))) {
+          this.viewerCounter.lastModel = saved;
+        }
+        this.restoredBroadcast = identity;
+      }
+      this.broadcastData = { ...data, profile };
+      this.latestGroupWindow = update.groups[0] || this.latestGroupWindow;
+      if (this.latestGroupWindow) {
+        this.groupRecurrence = analyzeGroupRecurrence(this.latestGroupWindow, data.history);
+      }
+      this.binder.refresh();
+    }).catch((error) => {
+      if (this.broadcast === identity) {
+        this.lastCheckpoint = -Infinity;
+        this.hasCompleteObservation = false;
+      }
+      console.warn('[Twitch Chat X-Ray] broadcast history', error?.message || String(error));
+    });
+  }
+
   interruptChat(reason) {
     if (this.chatSince !== null) {
-      this.capture?.events.push({ kind: 'chat-gap', ts: Date.now(), reason });
+      this.recordEvent({ kind: 'chat-gap', ts: Date.now(), reason });
     }
     this.chatSince = null;
+    this.chatClock.pause();
+  }
+
+  interruptViewer(reason, now = Date.now()) {
+    if (this.lastViewerSample !== null || this.viewerClock.since !== null) {
+      this.viewerCounter.history.interrupt(now);
+      this.recordEvent({ kind: 'viewer-gap', ts: now, reason });
+      this.lastViewerSample = null;
+      this.viewerGap = true;
+    }
+    this.viewerClock.pause();
   }
 
   interruptObservation(reason) {
     this.interruptChat(reason);
-    this.viewerCounter.history.interrupt(Date.now());
-    this.capture?.events.push({ kind: 'viewer-gap', ts: Date.now(), reason });
-    this.lastViewerSample = null;
-    this.viewerGap = false;
+    this.interruptViewer(reason);
+    this.syncBroadcast(true);
   }
 
   recordViewerSample({ sample, anomaly, outflow }) {
-    if (this.lastViewerSample !== null && sample.ts - this.lastViewerSample > 60000 &&
-        !this.viewerGap) {
-      this.capture?.events.push({
-        kind: 'viewer-gap', ts: this.lastViewerSample, resumedAt: sample.ts,
-      });
+    if (this.lastViewerSample !== null && sample.ts - this.lastViewerSample > MAX_OBSERVATION_GAP) {
+      this.recordEvent({ kind: 'viewer-gap', ts: this.lastViewerSample, resumedAt: sample.ts });
     } else if (this.viewerGap) {
-      this.capture?.events.push({ kind: 'viewer-resume', ts: sample.ts });
+      this.recordEvent({ kind: 'viewer-resume', ts: sample.ts });
     }
     this.lastViewerSample = sample.ts;
     this.viewerGap = false;
+    this.viewerClock.observe(sample.ts);
     this.capture?.viewerSamples.push(sample);
-    if (outflow) this.capture?.events.push(outflow);
-    if (anomaly) {
-      this.capture?.events.push(anomaly);
-    }
+    if (outflow) this.recordEvent(outflow);
+    if (anomaly) this.recordEvent(anomaly);
+    if (outflow || anomaly) this.syncBroadcast(true);
   }
 
   buildSessionSnapshot() {
     const now = Date.now();
-    return this.capture.snapshot(
+    const snapshot = this.capture.snapshot(
       now, this.analyzer.session.records, this.getViewerStats(now),
       this.viewerCounter.model, this.settings
     );
+    snapshot.broadcast = this.broadcast;
+    const checkpoint = checkpointMerge(this.broadcastData?.checkpoint ?? {}, {
+      intervals: { chat: this.chatClock.snapshot(), viewer: this.viewerClock.snapshot() },
+      events: this.observedEvents,
+    });
+    snapshot.observation = checkpoint.intervals;
+    snapshot.broadcastEvents = checkpoint.events;
+    if (this.groupRecurrence) {
+      snapshot.groupRecurrence = this.groupRecurrence;
+      snapshot.groupHistoryExperiment = compareHistoricalGroupScores(
+        snapshot.current.messages, this.settings.suspiciousThreshold, this.groupRecurrence
+      );
+    }
+    return snapshot;
   }
 
   downloadSession(previous) {
@@ -697,12 +905,15 @@ export class ChatXRayApp {
 
   maintenance() {
     try {
+      if (this.frozen) return;
       this.handleNavigation();
       const now = Date.now();
       if (this.lastMaintenance !== null && now - this.lastMaintenance > 60000) {
         this.interruptObservation('maintenance-gap');
       }
       this.lastMaintenance = now;
+      const identity = broadcastIdentity(this.channel, document);
+      if (identity) this.setBroadcast(identity);
       if (!this.settings.recordSession) {
         if (this.capture) {
           this.finishedCapture = this.buildSessionSnapshot();
@@ -716,6 +927,7 @@ export class ChatXRayApp {
         this.chatSince = now;
       }
 
+      if (this.chatSince !== null) this.chatClock.observe(now);
       const nextContainer = findMessageContainer();
       if (nextContainer !== this.container) {
         this.statsView.remove();
@@ -731,6 +943,7 @@ export class ChatXRayApp {
       this.binder.cleanup();
       this.statsView.update();
       this.viewerCounter.update(this.channel);
+      this.syncBroadcast(false, now);
       if (this.renderedIdGroups !== this.analyzer.idGroupSnapshot) {
         const hadGroups = this.renderedIdGroups?.count;
         this.renderedIdGroups = this.analyzer.idGroupSnapshot;

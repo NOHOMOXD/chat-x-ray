@@ -52,6 +52,7 @@ export class SettingsModal {
     this.onCommit = options.onCommit;
     this.onPreview = options.onPreview || (() => {});
     this.getLogger = options.getLogger || (() => null);
+    this.clearHistory = options.clearHistory;
     this.downloadSession = options.downloadSession || (() => {});
     this.sessionAvailability = [false, false];
 
@@ -277,7 +278,7 @@ export class SettingsModal {
 
     const output = this.modal.querySelector('[data-tcx-output="threshold"]');
     if (output) {
-      setTextIfChanged(output, settings.suspiciousThreshold + '%');
+      setTextIfChanged(output, settings.suspiciousThreshold + '/100');
     }
 
     const auditSection = this.modal.querySelector('.tcx-audit-section');
@@ -560,6 +561,25 @@ export class SettingsModal {
       button.addEventListener('click', () => this.downloadSession(index === 1));
       exports.appendChild(button);
     });
+    if (this.clearHistory) {
+      const clear = el('button', 'tcx-audit-btn', t('settings.clearHistory'));
+      const status = el('span');
+      status.setAttribute('role', 'status');
+      clear.type = 'button';
+      clear.dataset.tcxI18n = 'settings.clearHistory';
+      clear.addEventListener('click', async () => {
+        clear.disabled = true;
+        try {
+          await this.clearHistory();
+          status.textContent = t('settings.historyCleared');
+        } catch {
+          status.textContent = t('settings.historyClearFailed');
+        } finally {
+          clear.disabled = false;
+        }
+      });
+      exports.append(clear, status);
+    }
     body.appendChild(exports);
 
     // ---- interface
@@ -710,7 +730,7 @@ export class SettingsModal {
     const output = el(
       'output',
       'tcx-xray-panel__output',
-      this.getSettings().suspiciousThreshold + '%'
+      this.getSettings().suspiciousThreshold + '/100'
     );
     output.dataset.tcxOutput = 'threshold';
 
@@ -844,7 +864,7 @@ export class SettingsModal {
     const output =
       this.modal && this.modal.querySelector('[data-tcx-output="threshold"]');
     if (output) {
-      setTextIfChanged(output, target.value + '%');
+      setTextIfChanged(output, target.value + '/100');
     }
     this._paintRange(target, target.value);
     this.onPreview(this._collectSettings());

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -99,4 +100,18 @@ describe('formatting helpers', () => {
     expect(formatPercent(1.5, 'en')).toBe('1.5%');
     expect(formatPercent(Number.NaN, 'en')).toBe('—');
   });
+});
+
+it('localizes the browser manifest in Russian and English', () => {
+  const read = (locale) => JSON.parse(readFileSync(
+    `src/_locales/${locale}/messages.json`, 'utf8',
+  ));
+  const ru = read('ru');
+  const en = read('en');
+  expect(Object.keys(ru).sort()).toEqual(Object.keys(en).sort());
+  for (const key of ['extName', 'extDescription']) {
+    expect(ru[key].message).toMatch(/[а-я]/i);
+    expect(en[key].message).toMatch(/[a-z]/i);
+    expect(en[key].message).not.toEqual(ru[key].message);
+  }
 });

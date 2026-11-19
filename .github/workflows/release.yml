@@ -3,44 +3,127 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  browser-packages:
+    needs: verify
     runs-on: ubuntu-latest
+    outputs:
+      title: ${{ steps.version.outputs.title }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
+      - name: Validate release version
+        id: version
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const read = (name) => JSON.parse(fs.readFileSync(name, 'utf8'));
+          const { version } = read('package.json');
+          const lock = read('package-lock.json');
+          if (!/^\d+\.\d+\.\d+$/.test(version) ||
+              read('src/manifest.json').version !== version ||
+              lock.version !== version || lock.packages[''].version !== version) {
+            throw new Error('Package, lockfile and manifest must share a stable release version');
+          }
+          if (process.env.GITHUB_EVENT_NAME === 'push' && process.env.GITHUB_REF_NAME !== 'v' + version) {
+            throw new Error('Release tag must match v' + version);
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'title=Chat X-Ray ' + version.replace(/\.0$/, '') + '\n');
+          JS
       - run: npm ci
-      - run: npm test
-      - run: npm run build:all
-      - run: npm run lint:firefox
-
-      - name: Package store zips
+      - name: Package Chrome, Opera, Firefox and source
         run: npm run package
-
-      - name: Sign the Firefox build (AMO, unlisted channel)
+      - name: Rebuild the source archive in a clean directory
+        run: |
+          source_dir="$(mktemp -d)"
+          unzip -q release/*-source.zip -d "$source_dir"
+          cd "$source_dir"
+          npm ci
+          npm run build:all
+      - name: Sign Firefox when AMO credentials are configured
+        if: github.event_name == 'push'
+        continue-on-error: true
         env:
           WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
           WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
         run: |
+          if [ -z "$WEB_EXT_API_KEY" ] || [ -z "$WEB_EXT_API_SECRET" ]; then
+            echo 'AMO credentials are absent. Shipping Firefox source and unsigned ZIP.'
+            exit 0
+          fi
           npx web-ext sign \
             --source-dir dist/firefox \
             --artifacts-dir release \
             --channel=unlisted \
             --approval-timeout=600000
-
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          files: |
+          name: browser-packages
+          path: |
             release/*.zip
             release/*.xpi
+          if-no-files-found: error
+
+  safari-package:
+    needs: verify
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: xcodebuild -version
+      - run: npm run package:safari
+      - uses: actions/upload-artifact@v4
+        with:
+          name: safari-package
+          path: release/*-safari-macos-project.zip
+          if-no-files-found: error
+
+  assemble-release:
+    needs: [browser-packages, safari-package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: browser-packages
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: safari-package
+          path: release
+      - name: Write and verify checksums
+        working-directory: release
+        run: |
+          shopt -s nullglob
+          sha256sum *.zip *.xpi > SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+      - name: Upload release rehearsal
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-rehearsal
+          path: release/
+      - name: Publish GitHub release for the pushed tag
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ needs.browser-packages.outputs.title }}
+          files: release/*
+          fail_on_unmatched_files: true
           generate_release_notes: true

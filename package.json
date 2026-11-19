@@ -1,8 +1,8 @@
 {
   "name": "chat-x-ray",
-  "version": "1.5.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Local-only Twitch chat analysis: bot scoring, client-side R9K, audit log and a live-viewer estimate. Chrome/Edge/Opera + Firefox, RU/EN.",
+  "description": "Local-only Twitch chat analysis: bot scoring, client-side R9K, audit log and a live-viewer estimate. Chrome/Edge/Opera, Firefox and Safari for macOS, RU/EN.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -11,7 +11,9 @@
   "scripts": {
     "build": "node build.js",
     "build:all": "node build.js --all",
-    "build:firefox": "node build.js --all",
+    "build:firefox": "node build.js --firefox-only",
+    "build:safari": "node build.js --safari-only",
+    "package:safari": "node tools/package-safari.mjs",
     "dev": "node build.js --watch",
     "package": "node build.js --package",
     "test": "vitest run",
