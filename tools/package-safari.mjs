@@ -69,8 +69,10 @@ function main() {
   const project = findProject(projectDir);
   if (!project) throw new Error('Safari packager did not generate an Xcode project');
   updateProjectVersion(project);
+  // The app target embeds the extension. The generated XCTest targets use
+  // @testable imports and are not part of the Release product.
   run('xcodebuild', [
-    '-project', project, '-alltargets', '-configuration', 'Release', '-sdk', 'macosx',
+    '-project', project, '-target', appName, '-configuration', 'Release', '-sdk', 'macosx',
     `SYMROOT=${path.join(work, 'products')}`, `OBJROOT=${path.join(work, 'intermediates')}`,
     'CODE_SIGNING_ALLOWED=NO', 'CODE_SIGNING_REQUIRED=NO', 'build',
   ]);
