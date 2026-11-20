@@ -2,7 +2,7 @@ import { webcrypto } from 'node:crypto';
 import { beforeAll, afterAll, expect, it, vi } from 'vitest';
 import { describeGroups } from '../../src/core/id-group-diagnostics.js';
 import {
-  analyzeGroupRecurrence, buildGroupObservation, compareHistoricalGroupScores,
+  analyzeGroupRecurrence, buildGroupObservation, applyGroupHistoryBonus,
 } from '../../src/analysis/group-history.js';
 
 beforeAll(() => vi.stubGlobal('crypto', webcrypto));
@@ -11,7 +11,7 @@ afterAll(() => vi.unstubAllGlobals());
 const phrase = 'repeated unusual example';
 const first = [10, 20, 30, 40, 50, 70];
 const record = (id, text, botScore = 25) => ({
-  id: String(id), numericUserId: id, userKey: 'id:' + id, text, unbadged: true, botScore,
+  id: String(id), numericUserId: id, userKey: 'id:' + id, text, unbadged: true, botScore, triggers: [],
 });
 const outsiders = Array.from({ length: 40 }, (_, index) => record(100 + index, 'different text'));
 
@@ -45,9 +45,13 @@ it('stores hashed phrases, counts identical broadcast IDs once and tracks precis
     },
   });
   const messages = first.map((id) => record(id, phrase));
-  const score = compareHistoricalGroupScores(messages, 30, recurrence);
-  expect(score.crossings.experimentalOnly).toEqual(['id:10', 'id:20']);
-  expect(messages.every(({ botScore }) => botScore === 25)).toBe(true);
+  messages[0].botScore = 95;
+  for (const message of messages) {
+    applyGroupHistoryBonus(message, recurrence);
+    applyGroupHistoryBonus(message, recurrence);
+  }
+  expect(messages.map(({ botScore }) => botScore)).toEqual([100, 35, 25, 25, 25, 25]);
+  expect(messages[0].triggers).toHaveLength(1);
 });
 
 it('rejects a channel-wide phrase and requires the same speakers across broadcasts', async () => {
@@ -68,8 +72,6 @@ it('uses at most 20 prior broadcasts and leaves exempt authors out of the experi
     { ...record(10, phrase), roleExempt: true },
     { ...record(20, phrase), unbadged: false },
   ];
-  expect(compareHistoricalGroupScores(messages, 30, recurrence)).toMatchObject({
-    crossings: { neither: ['id:10', 'id:20'], experimentalOnly: [] },
-    eligibleAuthors: [],
-  });
+  for (const message of messages) applyGroupHistoryBonus(message, recurrence);
+  expect(messages.map(({ botScore }) => botScore)).toEqual([25, 25]);
 });

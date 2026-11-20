@@ -128,3 +128,13 @@ describe('isAlertState', () => {
     expect(isAlertState({})).toBe(false);
   });
 });
+
+it.each(['ru', 'en'])('uses exact %s numbers when compact rounding exceeds Twitch', (locale) => {
+  const range = { low: 14500, high: 28296 };
+  expect(formatViewerRangeCompact(range, locale, 28296)).toBe(
+    formatViewerRange(range, locale).replace(' – ', '–'),
+  );
+  expect(formatViewerRangeCompact({ low: 28296, high: 28296 }, locale, 28296)).toBe(
+    formatViewerRange({ low: 28296, high: 28296 }, locale).slice(1),
+  );
+});

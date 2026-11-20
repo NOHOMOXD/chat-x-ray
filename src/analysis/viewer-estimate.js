@@ -351,9 +351,9 @@ export function buildViewerModel(input) {
       ? history.median
       : official;
 
-  const range = estimateViewerRange(stableOfficial, stats, settings);
+  const range = estimateViewerRange(Math.min(official, stableOfficial), stats, settings);
   // ER is defined against the official number currently displayed, exactly as
-  // the on-page metric says; the median is only used to cap the extrapolation.
+  // the on-page metric says. The median can further lower the estimate cap.
   const engagement = getChatEngagement(official, stats, settings);
   const churn = history
     ? {

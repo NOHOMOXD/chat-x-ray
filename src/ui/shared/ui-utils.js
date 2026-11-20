@@ -58,7 +58,7 @@ export function formatViewerRange(range, locale) {
  * Compact viewer range for the inline counter: `≈8–12,5 тыс.` / `≈2,4–3,8 тыс.`
  * / `≈640–900`. The full, exact range stays in the tooltip.
  */
-export function formatViewerRangeCompact(range, locale) {
+export function formatViewerRangeCompact(range, locale, official = Infinity) {
   if (!range) {
     return '';
   }
@@ -90,6 +90,10 @@ export function formatViewerRangeCompact(range, locale) {
   const divisor = upper >= 1000000 ? 1000000 : upper >= 1000 ? 1000 : 1;
   const suffix = divisor === 1000000 ? millions : divisor === 1000 ? thousands : '';
   const display = (value) => divisor === 1 ? formatNumber(value, resolvedLocale) : compact(value, divisor);
+  if (divisor > 1 && Math.round(upper / divisor * 10) * divisor / 10 > official) {
+    return lower === upper ? formatNumber(upper, locale)
+      : formatNumber(lower, locale) + '–' + formatNumber(upper, locale);
+  }
   const first = display(lower);
   const last = display(upper);
   return (first === last ? first : first + '–' + last) + suffix;

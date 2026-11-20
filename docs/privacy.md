@@ -1,37 +1,26 @@
-# Privacy and permissions
+# Privacy
 
 **English** · [Русский](ru/privacy.md)
 
-The extension is **local-only**.
+Everything works on your computer.
 
-- **No network requests by default.** Tippy.js is bundled; no fonts, analytics
-  or update pings.
-- **Only the `storage` permission** is requested. An extension background worker serializes local history writes from open tabs.
-- Raw messages and the tab audit buffer live in memory. A downloaded JSON file
-  contains the evidence selected for that export.
-- Extension-local storage holds settings and broadcast history, including
-  coverage intervals, ER, saved measurements, event totals and group ID
-  membership with phrase fingerprints. The store keeps up to 20 broadcasts
-  per channel under a shared size limit. Use **Clear broadcast history** in the
-  Twitch settings panel to clear those records on this browser profile.
-- Stream identity can use Twitch metadata which the page already requested.
-  The extension does not issue a separate request for broadcast history.
-- The only optional network call is the **account-age lookup**
-  (`accountAgeLookup`, off by default): a POST to `gql.twitch.tv` asking for
-  `user.createdAt` of accounts that already look suspicious. It is an
-  unofficial endpoint, sends no cookies (`credentials: omit`) and is the only
-  thing that leaves the browser — and only while the setting is on.
+- **One permission, `storage`.** No accounts, no analytics, no telemetry, no
+  update pings. The tooltip library ships with the extension.
+- **Stored:** settings, and up to 20 recent broadcasts per watched channel
+  (coverage, chat rate, measurements, event counts, IDs of accounts in
+  suspicious groups). **Clear broadcast history** in the settings removes them.
+- **Not stored:** chat messages live in tab memory only, unless you export a
+  session. The downloaded JSON is never read back.
+- **In-page transfer:** the extension passes messages between its own scripts
+  inside the page, guarded by a random token per page load, so other page
+  scripts cannot inject fake chat.
 
-## Bridge integrity
+## The one optional request
 
-Content scripts cannot see the page's `window.WebSocket`, so a MAIN-world
-script taps it and forwards parsed messages to the isolated content script.
+The **account-age check** is off by default. When on, it asks
+`gql.twitch.tv` — the endpoint twitch.tv itself uses — for the creation date of
+accounts that scored at least 30 points or could still reach your threshold.
+Requests are batched, rate-limited, carry no cookies, and results stay in tab
+memory. Turn the setting off and no network traffic remains.
 
-Because the MAIN world is shared with Twitch and every other extension, a plain
-`postMessage` would be forgeable: any page script could inject fake chat and
-make the extension badge innocent users. The content script therefore generates
-a random **per-page-load token**, hands it to the tap in a handshake, and drops
-every payload that does not carry it.
-
-Firefox declares `data_collection_permissions: none` in its manifest, which is
-an accurate description of the above.
+Firefox's manifest declares no data collection, which matches the above.

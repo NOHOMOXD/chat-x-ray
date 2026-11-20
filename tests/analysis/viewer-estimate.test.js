@@ -238,3 +238,12 @@ describe('buildViewerModel', () => {
     expect(VIEWER_ESTIMATE_DEFAULTS.erAlertPercent).toBe(2.5);
   });
 });
+
+it.each([[9500, 11000, 9500], [11000, 9500, 9500], [9500, undefined, 9500]])(
+  'caps the range for current %s and median %s at %s',
+  (official, median, cap) => {
+    const model = buildViewerModel({ official, history: { median }, stats: stats() });
+    expect(model.range.high).toBe(cap);
+    expect(model.stableOfficial).toBe(median ?? official);
+  },
+);

@@ -88,10 +88,10 @@ function compareRanges(model, stats) {
   }
   return {
     displayed: model.range,
-    withoutShortWindowScale: estimateViewerRange(model.stableOfficial, {
+    withoutShortWindowScale: estimateViewerRange(Math.min(model.official, model.stableOfficial), {
       ...stats, sessionMs: 600000,
     }),
-    withSixToTwelvePercent: estimateViewerRange(model.stableOfficial, stats, {
+    withSixToTwelvePercent: estimateViewerRange(Math.min(model.official, model.stableOfficial), stats, {
       viewersPerChatterLow: 100 / 12,
       viewersPerChatterHigh: 100 / 6,
     }),

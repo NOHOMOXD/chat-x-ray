@@ -307,3 +307,24 @@ test('shows and exports a confirmed viewer drop while waiting for recovery', asy
     { from: 73069, to: 58000, delta: -15069, status: 'observing' },
   ]);
 });
+
+test('reattaches loading after channel switches and viewer node replacement', async ({ page }) => {
+  test.setTimeout(45000);
+  const viewer = '[data-a-target="animated-channel-viewers-count"]';
+  const progress = page.locator(viewer + ' + [data-tcx-ui="real-viewers"][data-tcx-state="loading"]');
+  const percent = progress.locator('.tcx-real-viewers__percent');
+
+  await expect(percent).toHaveText(/^\d+%$/);
+  const switchTo = (channel) => page.evaluate((name) => {
+    history.pushState({}, '', '/' + name);
+    document.querySelector('.live-channel-metadata-bar').dataset.channelLogin = name;
+  }, channel);
+  await switchTo('secondchannel');
+  await expect(progress).toHaveCount(0);
+  await switchTo('thirdchannel');
+  await expect(percent).toHaveText(/^\d+%$/, { timeout: 15000 });
+
+  const before = await percent.textContent();
+  await page.locator(viewer).evaluate((node) => node.replaceWith(node.cloneNode(true)));
+  await expect(percent).toHaveText(before);
+});

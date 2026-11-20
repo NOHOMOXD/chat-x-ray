@@ -121,7 +121,7 @@ export function buildCounterParts(model) {
     };
   }
   const text = model.range
-    ? ` (≈${formatViewerRangeCompact(model.range, getLocale())})`
+    ? ` (≈${formatViewerRangeCompact(model.range, getLocale(), model.official)})`
     : ` (${t('counter.loading')}…)`;
   return { loading: false, text };
 }
@@ -327,6 +327,8 @@ export class ViewerCounterAdjuster {
     this.targetNode = null;
     this.model = null;
     this.lastText = '';
+    this.lastHtml = false;
+    this.textRefs = null;
   }
 
   _findViewerCountElement() {

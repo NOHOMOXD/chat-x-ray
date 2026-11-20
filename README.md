@@ -2,92 +2,67 @@
 
 **English** · [Русский](README.ru.md)
 
-A local-only browser extension (Manifest V3) that reads the Twitch chat you
-already have open and tells you who in it looks like a bot. Chrome, Edge, Opera,
-Firefox and Safari on Mac. RU / EN.
+Chat X-Ray flags suspicious accounts in Twitch chat and estimates the audience from chat activity. Everything runs in your browser. Available in English and Russian for Chrome, Edge, Opera, Firefox and Safari on Mac.
 
-Analysis runs locally. The optional account-age lookup contacts Twitch.
+> Not affiliated with Twitch Interactive, Inc.
 
-> Not affiliated with, endorsed by, or sponsored by Twitch Interactive, Inc.
+## What you see
 
-## What it does
+- **Bot badge.** A `BOT 65` chip before a suspicious nickname, gold to red.
+  Hover it to see which signs added points. Moderators, VIPs, subscribers, the
+  broadcaster and known service bots are never flagged.
+- **Chat filter.** Near-duplicates, pastes and character floods from the last
+  15 minutes are muted or hidden if you want.
+- **Viewer estimate.** An estimated audience size appears next to Twitch’s official count.
 
-- **Bot badges.** Each suspicious account gets a `BOT 65` chip before the
-  nickname, colour-graded from gold to red. Hover for the exact signals.
-- **Adaptive R9K.** Catches pastes, near-duplicates and character floods across
-  a 15-minute window, optionally muting or hiding them.
-- **Live viewer estimate.** Next to Twitch's official number:
-  `73 069 (≈8–12,5 тыс.)` — extrapolated from clean unique chatters, never
-  modifying the official count.
-- **Loading progress.** Until the sample is big enough the counter says
-  `(Загружаю… 66%)` / `(Loading… 66%)` instead of showing a guess.
-- **Red states.** A bot wave, a bad viewer verdict, or a suspicious share past
-  your own threshold turns the counter and the stats strip red.
-- **Audit log.** Optional JSON export of everything flagged this session.
-
-Scores, thresholds, the viewer model and its limits: **[docs/algorithm.md](docs/algorithm.md)**.
+- **Loading progress.** `(Loading… 66%)` until enough chat has been seen.
+- **Red warnings.** A wave of suspicious accounts, low chat-to-viewer ratio or
+  a spike and collapse in viewers turns the counter and chat bar red.
+- **Session export.** Optional JSON of everything seen this session.
 
 ## Install
 
-### From source
+1. Open **[Releases](https://github.com/NOHOMOXD/chat-x-ray/releases)** and download the latest
+   `chat-x-ray-vX.Y.Z-chrome-opera.zip` (Chrome, Edge, Opera) or
+   `chat-x-ray-vX.Y.Z-firefox.zip` (Firefox).
+2. Unzip it into a folder you keep.
+3. Load it:
+   ```text
+   Chrome / Edge / Opera   chrome://extensions  → Developer mode → Load unpacked → that folder
+   Firefox 140+            about:debugging#/runtime/this-firefox → Load Temporary Add-on → manifest.json
+   ```
+   A Firefox temporary add-on disappears on restart — use the signed `.xpi` if
+   the release has one.
+4. Open any Twitch channel.
 
-```bash
-git clone <this repo>
-cd chat-x-ray
-npm ci
-npm run build:all
-```
+Safari on Mac needs Xcode: [Install and updates](docs/distribution.md).
 
-**Chrome / Edge / Opera** — open the browser’s extensions page (Opera uses `opera://extensions`) → enable *Developer mode* →
-*Load unpacked* → `dist/chrome`.
-
-**Firefox 140+** — `about:debugging#/runtime/this-firefox` → *Load Temporary
-Add-on…* → `dist/firefox/manifest.json`.
-
-### Stores
-
-Firefox and Edge are free to publish to; the Chrome Web Store charges a one-time
-$5. Signing and publishing are scripted — see
-**[docs/distribution.md](docs/distribution.md)**.
+Building from source is for development only: [Development](docs/development.md).
 
 ## Settings
 
-Open Twitch's own **Chat Settings** (the gear under chat). A **"Chat X-Ray
-Settings"** row sits at the bottom, like BetterTTV's. There is also a gear button
-in the chat header.
+Twitch's own **Chat Settings** (gear under chat) gets a **Chat X-Ray Settings**
+row at the bottom, like BetterTTV. There is also a gear in the chat header and
+a settings page in the extension itself.
 
-Everything is there: badge visibility, threshold (default **30 points**), muting or
-hiding, client-side R9K, the stats strip, the viewer counter, the audit log,
-the opt-in account-age lookup, and the interface language.
+- What to do with flagged accounts: keep, mute or hide.
+- What the chat filter does with repeats: mute or hide.
+- Bot threshold (default **30**), chat bar, viewer counter, session recording,
+  optional account-age check, interface language.
 
-## Privacy
+## Your data
 
-Local-only, one permission (`storage`), no network by default. Full detail:
-**[docs/privacy.md](docs/privacy.md)**.
+One permission, `storage`. Nothing is sent anywhere by default. The only
+exception is the optional account-age check, which you switch on yourself:
+[Privacy](docs/privacy.md).
 
-## Development
+## Docs
 
-```bash
-npm test            # unit + DOM tests (Vitest, happy-dom)
-npm run test:e2e    # Chromium and Firefox (Playwright)
-npm run verify      # everything CI runs
-npm run build:all   # Chromium, Firefox and Safari resources
-```
-
-Layout, scripts and testing notes: **[docs/development.md](docs/development.md)**.
-
-## Documentation
-
-| Doc | Contents |
+| Page | Contents |
 | --- | --- |
-| [algorithm.md](docs/algorithm.md) | Scoring matrix, R9K, viewer model, red states, limits |
-| [privacy.md](docs/privacy.md) | Permissions, storage, the opt-in GQL lookup, bridge token |
-| [development.md](docs/development.md) | Setup, scripts, project layout, testing |
-| [distribution.md](docs/distribution.md) | Stores, fees, signing, releases |
-| [twitch-api-options.md](docs/twitch-api-options.md) | What Twitch APIs could and could not add |
+| [How the analysis works](docs/algorithm.md) | Signs, chat filter, viewer estimate, limits |
+| [Privacy](docs/privacy.md) | Permissions, stored data, the optional lookup |
+| [Install and updates](docs/distribution.md) | Per-browser steps, updates, Safari |
+| [Optional Twitch data](docs/twitch-api-options.md) | What the Twitch APIs could add |
 
-## License
-
-MIT — see [LICENSE](LICENSE). Bundled third-party code: [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
-
-Version 1.0 adds local broadcast history, interruption coverage and group recurrence. See [distribution](docs/distribution.md) for Safari on Mac and GitHub releases.
+MIT — see [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).

@@ -2,83 +2,78 @@
 
 **English** · [Русский](ru/development.md)
 
-## Setup
+Users install a release ZIP — [README](../README.md#install). This page is for
+building and maintaining.
+
+## From source
+
+Node 20+.
 
 ```bash
 npm ci
-npm run build:all     # dist/chrome + dist/firefox + dist/safari
+npm run build:all    # dist/chrome, dist/firefox, dist/safari
 ```
 
-Node 20+ required.
-
-## Loading the extension
-
-**Chrome / Edge / Opera**
-
-1. `chrome://extensions` → enable *Developer mode*.
-2. *Load unpacked* → pick `dist/chrome`.
-3. Open any Twitch channel.
-
-**Firefox** (140+, temporary install)
-
-1. `about:debugging#/runtime/this-firefox`.
-2. *Load Temporary Add-on…* → pick `dist/firefox/manifest.json`.
-3. Temporary add-ons disappear on restart; for a permanent install use a signed
-   build (see `docs/distribution.md`).
-
-## Scripts
+Load `dist/chrome` as an unpacked extension, `dist/firefox/manifest.json` as a
+temporary add-on, or `dist/safari` via **Add Temporary Extension**.
 
 | Command | What it does |
 | --- | --- |
 | `npm test` | Unit + DOM tests (Vitest, happy-dom) |
-| `npm run test:watch` | Same, in watch mode |
-| `npm run test:coverage` | With a V8 coverage report |
-| `npm run build` | Chrome build only |
-| `npm run build:all` | Chromium, Firefox and Safari extension resources |
+| `npm run build` / `build:firefox` / `build:safari` | One target |
+| `npm run build:all` | All targets |
 | `npm run dev` | Rebuild on change |
-| `npm run test:e2e` | Loads the real build in Chromium and Firefox (Playwright) |
-| `npm run lint:firefox` | `web-ext lint` against the Firefox build |
-| `npm run verify` | Everything above, in CI order |
-| `npm run package` | Store-ready zips in `release/` |
+| `npm run test:e2e` | Real build in Playwright's Chromium and Firefox |
+| `npm run lint:firefox` | `web-ext lint` |
+| `npm run verify` | What CI runs |
+| `npm run package` | Zips and `SHA256SUMS.txt` in `release/` |
+| `npm run package:safari` | Xcode project in `release/` (macOS, full Xcode) |
 
-Playwright's bundled browsers install on demand:
+`src/` holds `app` (controller, background, options page), `core` (analyzer,
+R9K, ID groups), `analysis` (viewer estimate, history, capture), `platform`
+(socket tap, IRC parser, browser API), `config`, `i18n`, `ui`. Tests mirror it.
+
+## Scoring
+
+Source of truth: `WEIGHTS` in [src/core/analyzer.js](../src/core/analyzer.js).
+The ten account signals sum to 100; `HARD_SIGNAL_WEIGHTS.solicitation` adds
++25 on top.
+
+| Key | Pts | Key | Pts |
+| --- | :---: | --- | :---: |
+| `no-badges` | 15 | `fresh-account` | 10 |
+| `id-cluster` | 15 | `wave` | 10 |
+| `default-color` | 10 | `self-repeat` | 10 |
+| `username-digits` | 10 | `mechanical-rhythm` | 5 |
+| `first-msg` | 10 | `sterile-text` | 5 |
+
+Unknown account age adds 0. Privileged badges and `SERVICE_BOT_LOGINS` are
+exempt. `id-cluster` was cut to 15 when the ID window grew tenfold, and the old
+`mechanical` 10 was split into rhythm 5 + sterile text 5 for filtering.
+
+## Notes
+
+- The MAIN world is shared with Twitch, so `inject.js` payloads are accepted
+  only with the per-page-load token from the content script's handshake. E2E
+  asserts a forged message is dropped.
+- E2E serves a local fixture at `https://www.twitch.tv/`; Chrome dropped
+  `--load-extension`, so Playwright's Chromium is used.
+- Session capture schema 1: UTC timestamps, setting changes, minute summaries,
+  viewer samples, gaps, raids, anomalies, last ten minutes of messages.
 
 ```bash
-npx playwright install chromium firefox
+node tools/analyze-capture.mjs --snapshot snapshot.json [--reference viewers.jsonl]
+node tools/analyze-capture.mjs --chat chat.jsonl --viewers viewers.jsonl [--json out.json]
 ```
 
-## Project layout
+Raw captures contain public nicknames — for `--snapshot`, one JSON per line
+with `ts` (epoch ms); `testing_logs/` and audit exports are git-ignored.
 
-```text
-src/
-├── app/           content.js (controller), options page
-├── core/          analyzer, scoring matrix, R9K, chat session
-├── analysis/      viewer estimate, history, ER baseline
-├── platform/      MAIN-world socket tap, IRC parser, browser API adapter
-├── config/        settings model + storage repository
-├── i18n/          RU/EN catalogue and t()
-├── ui/
-│   ├── chat/      message binder, rows, stats strip, viewer counter
-│   ├── settings/  floating settings window
-│   ├── shared/    DOM helpers, Tippy controller
-│   └── styles.css
-├── _locales/      manifest localisation
-└── manifest.json  single manifest, per-browser tweaks in build.js
-```
+## Release
 
-`tests/` mirrors `src/`; `tests/e2e/` holds the Playwright spec and its
-Twitch-shaped fixture.
-
-## Testing notes
-
-- Unit/DOM tests run under **happy-dom**, a real DOM implementation. No fake
-  `document` objects: `querySelector`, events, `classList` and
-  `MutationObserver` behave like a browser.
-- The E2E spec loads the actual built extension into Chromium and serves a
-  local fixture at `https://www.twitch.tv/` (never the live site). It proves
-  the MAIN-world tap installs, an IRC message is ingested, the UI mounts, and a
-  **forged** message without the bridge token is ignored.
-- Google Chrome removed `--load-extension`, so E2E uses Playwright's bundled
-  Chromium.
-
-For Safari on Mac, use full Xcode and `npm run package:safari`. See [distribution](distribution.md).
+Run the **Release** workflow manually for a rehearsal; it runs the checks,
+rebuilds the source ZIP cleanly and parallelises browser E2E. Pushing a tag
+`vX.Y.Z` matching all three version fields publishes the GitHub Release.
+`AMO_JWT_ISSUER` / `AMO_JWT_SECRET` enable Mozilla signing. Keep the Gecko ID
+and `data_collection_permissions: none`: both are required to keep Firefox
+users updating. `npm run package` must run on a clean checkout.

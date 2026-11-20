@@ -89,6 +89,8 @@ export function buildBadgeTooltip(model) {
   const root = el('div', 'tcx-tip');
   if (model.groupOnly) {
     root.appendChild(el('div', 'tcx-tip__title', t('tip.idGroups')));
+    const repeat = model.triggers?.find((trigger) => trigger.key === 'group-recurrence');
+    if (repeat) root.appendChild(el('div', 'tcx-tip__note', triggerLabel(repeat) + ' (+' + repeat.points + ')'));
     appendIdGroup(root, model.idGroup);
     appendGroupHistory(root, model);
     return root;

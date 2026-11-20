@@ -49,6 +49,17 @@ describe('broadcast history', () => {
     expect((await restarted.load(identity(2), settings)).baseline).toMatchObject({ er: 4, sessions: 1 });
   });
 
+  it('returns earlier groups from another channel while keeping ER channel-specific', async () => {
+    const store = new BroadcastHistory(sharedPersistence());
+    await store.save(identity(1), settings, {
+      samples: [{ ts: 7000000, er: 3 }],
+      groups: [{ ts: 7000000, groups: [{ memberIds: [1, 2, 3, 4, 5, 6] }] }],
+    });
+    const data = await store.load({ ...identity(2), channel: 'other' }, settings);
+    expect(data.baseline).toBeNull();
+    expect(data.history[0]).toMatchObject({ channel: 'example', id: '1' });
+  });
+
   it('discards queued pre-clear evidence from a second open tab', async () => {
     const persistence = sharedPersistence();
     const first = new BroadcastHistory(persistence);

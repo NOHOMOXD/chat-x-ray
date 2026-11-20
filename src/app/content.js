@@ -31,7 +31,7 @@ import { onStorageChanged } from '../platform/browser-api.js';
 import { broadcastIdentity, normalizeBroadcast } from '../platform/broadcast-identity.js';
 import { coveredDuration, MAX_OBSERVATION_GAP, ObservationClock } from '../analysis/observation-clock.js';
 import { describeGroups, findIdGroups, recordsAt } from '../core/id-group-diagnostics.js';
-import { analyzeGroupRecurrence, buildGroupObservation, compareHistoricalGroupScores } from '../analysis/group-history.js';
+import { analyzeGroupRecurrence, buildGroupObservation, applyGroupHistoryBonus } from '../analysis/group-history.js';
 import { isExtensionMutation } from '../ui/shared/ui-utils.js';
 import { resolveLocale, setLocale } from '../i18n/i18n.js';
 
@@ -455,6 +455,7 @@ export class ChatXRayApp {
         continue;
       }
 
+      applyGroupHistoryBonus(result.record, this.groupRecurrence);
       this.binder.addPending(result.record);
       const { record } = result;
       const eligibleForFreshPoints = record.unbadged && !record.color &&
@@ -821,6 +822,7 @@ export class ChatXRayApp {
       this.latestGroupWindow = update.groups[0] || this.latestGroupWindow;
       if (this.latestGroupWindow) {
         this.groupRecurrence = analyzeGroupRecurrence(this.latestGroupWindow, data.history);
+        for (const record of records) applyGroupHistoryBonus(record, this.groupRecurrence);
       }
       this.binder.refresh();
     }).catch((error) => {
@@ -886,9 +888,6 @@ export class ChatXRayApp {
     snapshot.broadcastEvents = checkpoint.events;
     if (this.groupRecurrence) {
       snapshot.groupRecurrence = this.groupRecurrence;
-      snapshot.groupHistoryExperiment = compareHistoricalGroupScores(
-        snapshot.current.messages, this.settings.suspiciousThreshold, this.groupRecurrence
-      );
     }
     return snapshot;
   }

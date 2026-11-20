@@ -290,6 +290,7 @@ export const MESSAGES = Object.freeze({
     'trigger.auto.mechanical-rhythm': 'Механический ритм',
     'trigger.auto.sterile-text': 'Стерильный текст',
     'trigger.auto.self-repeat': 'Самоповторы',
+    'trigger.groupRecurrence': 'Повтор фразы из другого эфира',
     'trigger.auto.solicitation': 'Скам / попрошайничество',
     'trigger.auto.char-flood': 'Флуд символами',
     'trigger.clusterSuffix': ' ×{count}',
@@ -365,7 +366,7 @@ export const MESSAGES = Object.freeze({
     'options.weights': 'За что начисляются баллы',
     'options.scoreHelp': 'BOT 30 означает 30 баллов подозрительности. Наведи курсор на бейдж перед ником, чтобы увидеть признаки и их вклад.',
     'options.repeatHelp': 'R9K ищет одинаковые и похожие сообщения и цепочки повторяющихся символов. Поэтому даже реплика автора без бейджа BOT может приглушаться.',
-    'options.estimateHelp': 'Модель предполагает, что за 10 минут пишут 8–12,5% зрителей. Например, 1 000 уникальных авторов, прошедших фильтр, дают оценку 8 000–12 500 зрителей до ограничения медианой онлайна Twitch. Доля пишущих на конкретном эфире может отличаться.',
+    'options.estimateHelp': 'Модель предполагает, что за 10 минут пишут 8–12,5% зрителей. Например, 1 000 уникальных авторов, прошедших фильтр, дают оценку 8 000–12 500 зрителей до ограничения текущим онлайном Twitch и его медианой. Доля пишущих на конкретном эфире может отличаться.',
     'options.heading': 'Настройки',
     'options.thresholdLabel': 'Порог срабатывания (10–100 баллов)',
     'options.auditHelp':
@@ -569,6 +570,7 @@ export const MESSAGES = Object.freeze({
     'trigger.auto.mechanical-rhythm': 'Mechanical rhythm',
     'trigger.auto.sterile-text': 'Sterile text',
     'trigger.auto.self-repeat': 'Self-repeats',
+    'trigger.groupRecurrence': 'The same authors repeated a rare phrase on another broadcast',
     'trigger.auto.solicitation': 'Scam / begging',
     'trigger.auto.char-flood': 'Character flood',
     'trigger.clusterSuffix': ' ×{count}',
@@ -644,7 +646,7 @@ export const MESSAGES = Object.freeze({
     'options.weights': 'Score breakdown',
     'options.scoreHelp': 'BOT 30 means a suspicion score of 30 points. Hover over the badge before a username to see which signals contributed.',
     'options.repeatHelp': 'R9K detects repeated or similar messages and runs of identical characters. It can dim a message even when its author has no BOT badge.',
-    'options.estimateHelp': 'The model assumes that 8–12.5% of viewers write in ten minutes. For example, 1,000 unique authors passing the filter yield an estimate of 8,000–12,500 viewers before the cap based on the median Twitch count. Participation varies by stream.',
+    'options.estimateHelp': 'The model assumes that 8–12.5% of viewers write in ten minutes. For example, 1,000 unique authors passing the filter yield an estimate of 8,000–12,500 viewers before applying the lower of the current and median Twitch counts as a cap. Participation varies by stream.',
     'options.heading': 'Settings',
     'options.thresholdLabel': 'Action threshold (10–100 points)',
     'options.auditHelp':

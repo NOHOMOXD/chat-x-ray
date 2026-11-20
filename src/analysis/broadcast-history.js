@@ -161,7 +161,10 @@ function historySnapshot(records, identity, settings) {
       low: hasRange ? quantile(sorted, 0.25) : null,
       high: hasRange ? quantile(sorted, 0.75) : null,
     } : null,
-    history: earlier.slice(0, MAX_BROADCASTS_PER_CHANNEL).map(({ channel, id, startedAt, checkpoint }) => ({
+    history: records.filter((item) => priorBroadcast(item, current[0] ?? identity) &&
+      (item.channel === identity.channel || item.checkpoint?.groups?.some((observation) => observation.groups?.length)))
+      .sort((a, b) => startedAt(b) - startedAt(a))
+      .slice(0, MAX_BROADCASTS_PER_CHANNEL).map(({ channel, id, startedAt, checkpoint }) => ({
       channel, id: id || broadcastKey({ channel, startedAt }), startedAt,
       groupObservations: checkpoint.groups,
     })),

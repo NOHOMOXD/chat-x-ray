@@ -1,5 +1,5 @@
 const MAX_BROADCASTS = 20;
-const COORDINATION_BONUS = 5;
+const COORDINATION_BONUS = 10;
 const MIN_SHARED_SPEAKERS = 2;
 const encoder = new TextEncoder();
 
@@ -99,28 +99,15 @@ export function analyzeGroupRecurrence(observation, previousBroadcasts) {
   return { observedBroadcasts: broadcasts.size, groups, authors };
 }
 
-export function compareHistoricalGroupScores(records, threshold, recurrence) {
-  const authorScores = new Map();
-  for (const record of records) {
-    if (record.serviceBot) continue;
-    const author = authorScores.get(record.userKey) ?? { current: 0, experimental: 0, eligible: false };
-    const evidence = recurrence.authors[record.numericUserId];
-    const eligible = !record.roleExempt && record.unbadged && evidence?.coordinatedBroadcasts > 0;
-    author.eligible ||= eligible;
-    author.current = Math.max(author.current, record.botScore);
-    author.experimental = Math.max(author.experimental,
-      Math.min(100, record.botScore + (eligible ? COORDINATION_BONUS : 0)));
-    authorScores.set(record.userKey, author);
-  }
-
-  const crossings = { both: [], currentOnly: [], experimentalOnly: [], neither: [] };
-  const eligibleAuthors = [];
-  for (const [key, author] of authorScores) {
-    const { current, experimental, eligible } = author;
-    if (eligible) eligibleAuthors.push(key);
-    if (current >= threshold) crossings.both.push(key);
-    else if (experimental >= threshold) crossings.experimentalOnly.push(key);
-    else crossings.neither.push(key);
-  }
-  return { threshold, bonus: COORDINATION_BONUS, crossings, eligibleAuthors };
+export function applyGroupHistoryBonus(record, recurrence) {
+  if (!record.unbadged || record.roleExempt || record.serviceBot ||
+      !recurrence?.authors[record.numericUserId]?.coordinatedBroadcasts ||
+      record.triggers.some((trigger) => trigger.key === 'group-recurrence')) return;
+  record.triggers.push({
+    key: 'group-recurrence',
+    labelKey: 'trigger.groupRecurrence',
+    label: 'Повтор фразы из другого эфира',
+    points: COORDINATION_BONUS,
+  });
+  record.botScore = Math.min(100, record.botScore + COORDINATION_BONUS);
 }
