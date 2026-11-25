@@ -10,7 +10,12 @@ export class BotLogger {
     this.records = [];
   }
 
-  add(record) {
+  remove(id) {
+    const index = this.records.findIndex(entry => entry.id === id);
+    if (index >= 0) this.records.splice(index, 1);
+  }
+
+  add(record, suspicious) {
     if (!record) {
       return;
     }
@@ -24,7 +29,7 @@ export class BotLogger {
       login: record.login,
       displayName: record.displayName || record.login,
       text: record.text,
-      botScore: record.botScore,
+      botScore: record.botScore, suspicious,
       triggers: record.triggers ? [...record.triggers] : [],
       // Flat key list makes dumps easy to filter: `sterile-text`,
       // `mechanical-rhythm`, `fresh-account`, `id-cluster`, ...
@@ -46,6 +51,11 @@ export class BotLogger {
         : 0,
     };
 
+    const existing = this.records.findIndex(item => item.id === record.id);
+    if (existing >= 0) {
+      this.records[existing] = entry;
+      return;
+    }
     this.records.push(entry);
     if (this.records.length > this.maxSize) {
       this.records.shift();

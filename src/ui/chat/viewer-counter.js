@@ -26,6 +26,8 @@ import {
   setAttributeIfChanged,
   setTextIfChanged,
 } from '../shared/ui-utils.js';
+import { chatModeLabel } from '../../i18n/i18n.js';
+import { modeProfile } from '../../platform/chat-mode.js';
 import { broadcastProfile } from '../../analysis/broadcast-history.js';
 import { buildViewerModel } from '../../analysis/viewer-estimate.js';
 import { ViewerHistory } from '../../analysis/viewer-history.js';
@@ -128,7 +130,7 @@ export function buildCounterParts(model) {
 
 function counterAria(model) {
   const locale = getLocale();
-  const parts = [];
+  const parts = [chatModeLabel(model)].filter(Boolean);
   if (model.loading && !model.loading.ready) {
     const checks = model.loading.checks
       .filter((check) => check.weight > 0)
@@ -246,7 +248,8 @@ export class ViewerCounterAdjuster {
     if (accepted) {
       this.onSample?.(accepted);
     }
-    if (stats.chatConnected === false && (this.lastModel?.chatConnected || this.lastModel?.engagement?.measurable)) {
+    if (stats.chatConnected === false && stats.chatAccess !== 'unknown' &&
+        (this.lastModel?.chatConnected || this.lastModel?.engagement?.measurable)) {
       this.showLastMeasurement(settings, now);
       return;
     }
@@ -264,7 +267,7 @@ export class ViewerCounterAdjuster {
       return;
     }
     model.threshold = threshold;
-    model.historyProfile = broadcastProfile(settings);
+    model.historyProfile = broadcastProfile({ ...settings, roomProfile: modeProfile(stats.roomMode) });
     model.chatConnected = stats.chatConnected !== false;
     model.sampledAt = now;
     model.input = modelInput;
@@ -275,7 +278,7 @@ export class ViewerCounterAdjuster {
       now - model.churn.lastAnomaly.ts < this.history.options.churnWindowMs
       ? model.churn.lastAnomaly.kind
       : model.engagement?.alert ? 'lowEr'
-        : stats.chatConnected === false ? 'disconnected'
+          : stats.chatConnected === false ? 'disconnected'
           : model.engagement?.measurable && model.range ? 'ok' : 'waiting';
     this.lastModel = model;
     this.onModel?.(model);
@@ -302,7 +305,15 @@ export class ViewerCounterAdjuster {
     if (target) {
       const { lastOutflow } = this.history.getStats(now);
       const churn = { ...this.lastModel.churn, lastOutflow };
-      this._render(target, { ...this.lastModel, churn, stale: true, viewerStatus: 'stale' });
+      const stats = this.getStats(now);
+      const model = { ...this.lastModel, churn, stale: true, viewerStatus: 'stale' };
+      if (model.sampledAt < stats.windowSince) {
+        Object.assign(model, {
+          roomMode: stats.roomMode, chatAccess: stats.chatAccess, range: null,
+          engagement: null, erBaseline: null, loading: null,
+        });
+      }
+      this._render(target, model);
     } else {
       this.remove();
     }

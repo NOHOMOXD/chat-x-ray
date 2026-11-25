@@ -36,11 +36,13 @@ test('the UI mounts: stats strip, viewer counter and settings button', async ({
   await expect(page.locator('[data-tcx-ui="settings-button"]')).toBeVisible();
 });
 
-test('the viewer counter shows a percentage or a range in parentheses', async ({
+test('the viewer counter explains missing room settings', async ({
   page,
 }) => {
   const text = page.locator('[data-tcx-ui="real-viewers"]');
-  await expect(text).toHaveText(/\(.*(\d+%|≈)/, { timeout: 15000 });
+  await expect(text).toHaveText(/Загружаю/, { timeout: 15000 });
+  await text.hover();
+  await expect(page.getByRole('dialog')).toContainText('Режим чата неизвестен');
 });
 
 test('an IRC message is ingested and reflected in the live stats', async ({
@@ -172,7 +174,7 @@ test('downloads a session snapshot with regular chat messages', async ({ page })
     const download = await downloadPromise;
     const snapshot = JSON.parse(await readFile(await download.path(), 'utf8'));
     expect(snapshot).toMatchObject({
-      schemaVersion: 1, channel: CHANNEL,
+      schemaVersion: 3, channel: CHANNEL,
       current: { idGroupAudit: { groups: [], comparison: { threshold: 30 } } },
     });
     return snapshot.current.messages.map((message) => message.id);
@@ -189,7 +191,7 @@ test('the viewer popover retains scroll and focus while its online count updates
   await trigger.focus();
   const dialog = page.getByRole('dialog');
   const panel = dialog.locator('.tcx-tip--viewer');
-  await expect(panel).toContainText('Собираем данные');
+  await expect(panel).toContainText('Режим чата неизвестен');
   await expect(panel).toContainText('Наплывы за сессию0');
   await expect(panel).toContainText('Оттоки за сессию0');
   await expect(panel.locator('details')).toHaveCount(0);
@@ -277,7 +279,7 @@ test('both popovers fit in English with a six-digit online count and less layout
 });
 
 test('shows and exports a confirmed viewer drop while waiting for recovery', async ({ page }) => {
-  test.setTimeout(55000);
+  test.setTimeout(75000);
   await page.locator('[data-tcx-ui="settings-button"]').click();
   await page.locator('[data-tcx-setting="recordSession"]').check();
   const exportButton = page.locator('[data-tcx-session-export="0"]');
@@ -289,7 +291,7 @@ test('shows and exports a confirmed viewer drop while waiting for recovery', asy
   const panel = page.getByRole('dialog').locator('.tcx-tip--viewer');
   await expect(panel).toContainText('Оттоки за сессию0');
   // Leave the fixture's initial count in place through the viewer warm-up.
-  await page.waitForTimeout(9500);
+  await page.waitForTimeout(28000);
   await page.locator('[data-a-target="animated-channel-viewers-count"]').evaluate((node) => {
     node.textContent = '58,000';
   });
@@ -308,13 +310,13 @@ test('shows and exports a confirmed viewer drop while waiting for recovery', asy
   ]);
 });
 
-test('reattaches loading after channel switches and viewer node replacement', async ({ page }) => {
+test('reattaches the current room status after channel switches and viewer node replacement', async ({ page }) => {
   test.setTimeout(45000);
   const viewer = '[data-a-target="animated-channel-viewers-count"]';
   const progress = page.locator(viewer + ' + [data-tcx-ui="real-viewers"][data-tcx-state="loading"]');
-  const percent = progress.locator('.tcx-real-viewers__percent');
 
-  await expect(percent).toHaveText(/^\d+%$/);
+
+  await expect(progress).toHaveText(/Загружаю/);
   const switchTo = (channel) => page.evaluate((name) => {
     history.pushState({}, '', '/' + name);
     document.querySelector('.live-channel-metadata-bar').dataset.channelLogin = name;
@@ -322,9 +324,92 @@ test('reattaches loading after channel switches and viewer node replacement', as
   await switchTo('secondchannel');
   await expect(progress).toHaveCount(0);
   await switchTo('thirdchannel');
-  await expect(percent).toHaveText(/^\d+%$/, { timeout: 15000 });
+  await expect(progress).toHaveText(/Загружаю/, { timeout: 15000 });
 
-  const before = await percent.textContent();
+
   await page.locator(viewer).evaluate((node) => node.replaceWith(node.cloneNode(true)));
-  await expect(percent).toHaveText(before);
+  await expect(progress).toHaveText(/Загружаю/);
+});
+
+test('tracks chat restrictions, retains the estimate and keeps a newcomer in the audience', async ({ page }) => {
+  test.setTimeout(165000);
+  // Drive the real tap on a closed native socket with deterministic local events.
+  await page.evaluate(async () => {
+    const socket = window.__fixture.createChatSocket();
+    const closed = new Promise(resolve => socket.addEventListener('close', resolve, { once: true }));
+    socket.close();
+    await closed;
+    window.roomSocket = socket;
+    socket.dispatchEvent(new Event('open'));
+  });
+  const send = frame => page.evaluate(line => window.__fixture.deliver(window.roomSocket, line), frame);
+  await page.locator('[data-tcx-ui="settings-button"]').click();
+  await page.locator('[data-tcx-setting="recordSession"]').check();
+  const exportButton = page.locator('[data-tcx-session-export="0"]');
+  await expect(exportButton).toBeEnabled();
+  await page.keyboard.press('Escape');
+  const mode = tags => send('@' + tags + ' :tmi.twitch.tv ROOMSTATE #testchannel');
+  const counter = page.locator('[data-tcx-ui="real-viewers"]');
+  await mode('subs-only=1;followers-only=-1;slow=0;emote-only=0');
+  await expect(counter).toHaveText(/Загружаю/);
+  await send(privmsg({ id: 'new1', login: 'newcomer', userId: '8001', text: 'привет', firstMsg: 1 }));
+  await page.evaluate(() => window.__fixture.appendRow('newcomer', 'привет'));
+  const row = page.locator('[data-a-user="newcomer"]');
+  await expect(row).toHaveAttribute('data-tcx-bound', '1');
+  await expect(row.locator('.tcx-bot-badge')).toHaveText('35');
+  await expect(row).toBeVisible();
+  await counter.focus();
+  await expect(page.locator('[role="dialog"][data-state="visible"]')).toContainText('1 из 1');
+  await counter.press('Escape');
+  const strip = page.locator('[data-tcx-ui="stats"]');
+  await strip.focus();
+  await expect(page.locator('[role="dialog"][data-state="visible"]')).toContainText('1 из 1 сообщений (100%)');
+  await strip.press('Escape');
+  await page.locator('[data-tcx-ui="settings-button"]').click();
+  const downloading = page.waitForEvent('download');
+  await exportButton.click();
+  const snapshot = JSON.parse(await readFile(await (await downloading).path(), 'utf8'));
+  expect(snapshot.current.messages.find(message => message.id === 'new1')).toMatchObject({
+    botScore: 35, suspicious: false,
+  });
+  expect(snapshot.current.stats).toMatchObject({ cleanUsers: 1, chatAccess: 'subscribers' });
+  await page.keyboard.press('Escape');
+  await mode('slow=5');
+  await expect(counter).toHaveText(/Загружаю/);
+  await counter.hover();
+  const popover = page.locator('[role="dialog"][data-state="visible"] .tcx-tip--viewer');
+  await expect(popover).toContainText('Только для платных подписчиков · Замедление');
+  await mode('subs-only=0;followers-only=0');
+  await expect(counter).toHaveText(/Загружаю.*\d+%\)/);
+  await expect(counter).not.toContainText('фолловеров');
+  await expect(popover).toContainText('Только для фолловеров · Замедление');
+  await expect(popover).toContainText('Чистых авторов 1 из 2');
+  for (let index = 0; index < 4; index++) {
+    await send(privmsg({ id: 'warm' + index, login: 'writer' + index,
+      userId: String(12000 + index * 2000), text: 'message ' + index }));
+  }
+  await expect(counter).toContainText('≈', { timeout: 130000 });
+  const range = await counter.textContent();
+  await mode('subs-only=1');
+  await expect(popover).toContainText('Только для платных подписчиков');
+  await expect(counter).toHaveText(range.trim());
+  await mode('subs-only=0');
+  await expect(popover).toContainText('Только для фолловеров');
+  await expect(counter).toHaveText(range.trim());
+  await counter.press('Escape');
+  await page.locator('[data-tcx-ui="settings-button"]').click();
+  const finalDownload = page.waitForEvent('download');
+  await exportButton.click();
+  const final = JSON.parse(await readFile(await (await finalDownload).path(), 'utf8'));
+  const changes = final.events.filter(event => event.kind === 'room-mode').slice(-2);
+  expect(changes).toMatchObject([
+    { from: { subscribers: 0 }, to: { subscribers: 1 } },
+    { from: { subscribers: 1 }, to: { subscribers: 0 } },
+  ]);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => {
+    window.roomSocket.dispatchEvent(new Event('close'));
+    window.roomSocket.dispatchEvent(new Event('open'));
+  });
+  await expect(counter).toHaveText(/Загружаю/);
 });

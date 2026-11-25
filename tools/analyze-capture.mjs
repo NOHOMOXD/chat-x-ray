@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { chatAccess, modeProfile } from '../src/platform/chat-mode.js';
 /*
  * Twitch Chat X-Ray — offline capture analyzer (developer tool).
  *
@@ -25,7 +26,7 @@ import { ViewerHistory } from '../src/analysis/viewer-history.js';
 import { buildViewerModel, estimateViewerRange } from '../src/analysis/viewer-estimate.js';
 import { formatNumber } from '../src/ui/shared/ui-utils.js';
 
-import { compareIdGroupScores, summarizeRecords } from '../src/analysis/session-capture.js';
+import { compareIdGroupScores, estimateWindow, summarizeRecords } from '../src/analysis/session-capture.js';
 import { describeGroups, findIdGroups, recordsAt, summarizeMatches } from '../src/core/id-group-diagnostics.js';
 import { DEFAULTS as SETTINGS } from '../src/config/settings.js';
 
@@ -34,7 +35,9 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
     const value = argv[i + 1];
-    if (key === '--snapshot') {
+    if (key === '--movements') {
+      args.movements = true;
+    } else if (key === '--snapshot') {
       args.snapshot = value;
       i += 1;
     } else if (key === '--reference') {
@@ -116,20 +119,24 @@ function compareEvents(events, reference, samples) {
 function replayViewerOutflows(snapshot, now) {
   const history = new ViewerHistory();
   const outflows = [];
+  const surges = [];
   const timeline = [
     ...snapshot.viewerSamples,
-    ...snapshot.events.filter(({ kind }) => kind === 'viewer-gap'),
+    ...snapshot.events.filter(({ kind }) => ['viewer-gap', 'raid'].includes(kind)),
   ].sort((a, b) => a.ts - b.ts);
   for (const entry of timeline) {
     if (entry.kind === 'viewer-gap') {
       history.interrupt(entry.ts);
+    } else if (entry.kind === 'raid') {
+      history.recordRaid(entry);
     } else {
       const accepted = history.record(entry.value, entry.ts, { cleanUsers: entry.clean });
+      if (accepted?.anomaly?.kind === 'surge') surges.push(accepted.anomaly);
       if (accepted?.outflow) outflows.push(accepted.outflow);
     }
   }
   const stats = history.getStats(now);
-  return { count: stats.totalOutflows, outflows };
+  return { count: stats.totalOutflows, outflows, surges };
 }
 
 function replayWave(event, current, exportedAt) {
@@ -151,7 +158,9 @@ function replayWave(event, current, exportedAt) {
 function analyzeSnapshot(args) {
   const snapshot = JSON.parse(fs.readFileSync(args.snapshot, 'utf8'));
   let report;
-  if (Array.isArray(snapshot)) {
+  if (args.movements) {
+    report = replayViewerOutflows(snapshot, Date.parse(snapshot.exportedAt));
+  } else if (Array.isArray(snapshot)) {
     const triggers = new Map();
     for (const entry of snapshot) {
       for (const key of entry.triggerKeys || []) {
@@ -160,15 +169,17 @@ function analyzeSnapshot(args) {
     }
     report = { kind: 'selected-audit', entries: snapshot.length, triggers: Object.fromEntries(triggers) };
   } else {
-    if (snapshot.schemaVersion !== 1) {
+    if (![1, 2, 3].includes(snapshot.schemaVersion)) {
       throw new Error('Unknown session snapshot format');
     }
     const { current, minutes, events } = snapshot;
     const settings = snapshot.settings.at(-1)?.value || SETTINGS;
     const now = Date.parse(snapshot.exportedAt);
-    const model = current.model?.input ? buildViewerModel(current.model.input) : current.model;
+    const model = snapshot.schemaVersion >= 3 && current.model?.input ? buildViewerModel(current.model.input) : current.model;
     const reportMinutes = minutes.map((row) => ({
       ts: row.ts, coverageMs: row.stats.sessionMs, minute: row.minute,
+      topAuthorMessages: row.minute?.topAuthorMessages ?? null,
+      audienceMessages: row.minute?.audienceMessages ?? null,
       official: row.model?.official, diagnostics: row.diagnostics,
       idGroupAudit: row.idGroupAudit ?? null,
       ranges: compareRanges(row.model, row.stats),
@@ -186,7 +197,7 @@ function analyzeSnapshot(args) {
         model,
         matchingDisplayedRange: JSON.stringify(model?.range) === JSON.stringify(current.model?.range),
         ranges: compareRanges(model, current.stats),
-        diagnostics: summarizeRecords(current.messages, settings, {
+        diagnostics: snapshot.schemaVersion === 1 ? current.diagnostics ?? null : summarizeRecords(estimateWindow(current.messages, current.stats), settings, {
           official: model?.official, stableOfficial: model?.stableOfficial, stats: current.stats,
         }),
         idGroupAudit: current.idGroupAudit ??
@@ -288,6 +299,11 @@ function main() {
   let model = null;
   let lastViewer = null;
   const timeline = [];
+  let roomMode = {};
+  let roomSince = messages[0].ts;
+  function viewerStats(ts) {
+    return { ...analyzer.getStats(ts, messages[0].ts), mixedMode: roomSince > messages[0].ts && ts - roomSince < 600000, roomMode, chatAccess: chatAccess(roomMode) };
+  }
 
   const events = [];
   for (let i = 0; i < messages.length; i += 1) {
@@ -302,6 +318,12 @@ function main() {
     const event = events[i];
 
     if (event.kind === 'message') {
+      if (event.message.kind === 'room-state') {
+        const next = { ...roomMode, ...event.message.mode };
+        if (modeProfile(next) !== modeProfile(roomMode)) roomSince = event.ts;
+        roomMode = next;
+        continue;
+      }
       if (event.message.kind === 'raid') {
         history.recordRaid(event.message);
         continue;
@@ -334,7 +356,7 @@ function main() {
     }
 
     lastViewer = event.viewers;
-    const stats = analyzer.getStats(event.ts);
+    const stats = viewerStats(event.ts);
     history.record(event.viewers, event.ts, {
       cleanUsers: stats.cleanUsers,
       countMessages: (from, to) => from < messages[0].ts ? null :
@@ -369,7 +391,7 @@ function main() {
     messages[messages.length - 1].ts,
     viewerRows.length ? viewerRows[viewerRows.length - 1].ts : 0
   );
-  const stats = analyzer.getStats(lastTs);
+  const stats = viewerStats(lastTs);
   const historyStats = history.getStats(lastTs);
   const finalModel = lastViewer
     ? buildViewerModel({ official: lastViewer, stats, history: historyStats })

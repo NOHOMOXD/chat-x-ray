@@ -37,13 +37,20 @@ import { observePageBroadcasts } from './broadcast-identity.js';
    */
   const HANDSHAKE_EVENT = 'twitch-chat-xray:handshake';
   let bridgeToken = null;
+  const socketRooms = new Map();
+  let bridgeSequence = 0;
   const latestBroadcasts = new Map();
 
   function adoptToken(token) {
     if (typeof token === 'string' && token.length >= 16) {
       const changed = bridgeToken !== token;
       bridgeToken = token;
-      if (changed) postMessages([...latestBroadcasts.values()], '');
+      if (changed) {
+        postMessages([...latestBroadcasts.values()], '');
+        for (const [socketId, rooms] of socketRooms) {
+          postMessages([{ kind: 'socket-open', socketId }, ...rooms.values()], '');
+        }
+      }
     }
   }
 
@@ -89,6 +96,7 @@ import { observePageBroadcasts } from './broadcast-identity.js';
       token: bridgeToken,
       socketUrl: String(socketUrl || ''),
       messages,
+      sequence: ++bridgeSequence,
     };
 
     // Synchronous bridge: the content script can score the message before
@@ -117,7 +125,7 @@ import { observePageBroadcasts } from './broadcast-identity.js';
     postMessages([message], '');
   });
 
-  function consumeFrame(rawFrame, socketUrl) {
+  function consumeFrame(rawFrame, socketUrl, socketId) {
     if (typeof rawFrame !== 'string' || !rawFrame) {
       return;
     }
@@ -129,12 +137,20 @@ import { observePageBroadcasts } from './broadcast-identity.js';
       return;
     }
 
+    for (const message of messages) {
+      if (message.kind !== 'room-state') continue;
+      const rooms = socketRooms.get(socketId);
+      if (!rooms) continue;
+      message.socketId = socketId;
+      message.mode = { ...rooms.get(message.channel)?.mode, ...message.mode };
+      rooms.set(message.channel, message);
+    }
     postMessages(messages, socketUrl);
   }
 
-  function consumeData(data, socketUrl) {
+  function consumeData(data, socketUrl, socketId) {
     if (typeof data === 'string') {
-      consumeFrame(data, socketUrl);
+      consumeFrame(data, socketUrl, socketId);
       return;
     }
 
@@ -143,7 +159,7 @@ import { observePageBroadcasts } from './broadcast-identity.js';
         return;
       }
       try {
-        consumeFrame(textDecoder.decode(new Uint8Array(data)), socketUrl);
+        consumeFrame(textDecoder.decode(new Uint8Array(data)), socketUrl, socketId);
       } catch (_error) {
         // Ignore malformed binary
       }
@@ -154,7 +170,7 @@ import { observePageBroadcasts } from './broadcast-identity.js';
       data
         .text()
         .then((text) => {
-          consumeFrame(text, socketUrl);
+          consumeFrame(text, socketUrl, socketId);
         })
         .catch(() => {
           // Ignore unreadable blob
@@ -172,11 +188,13 @@ import { observePageBroadcasts } from './broadcast-identity.js';
     try {
       for (const kind of ['open', 'close']) {
         socket.addEventListener(kind, () => {
+          if (kind === 'open') socketRooms.set(socketId, new Map());
+          else socketRooms.delete(socketId);
           postMessages([{ kind: 'socket-' + kind, socketId }], socketUrl);
         });
       }
       socket.addEventListener('message', (event) => {
-        consumeData(event.data, socketUrl);
+        consumeData(event.data, socketUrl, socketId);
       });
     } catch (_error) {
       // Socket was already closed

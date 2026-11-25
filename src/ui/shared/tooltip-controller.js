@@ -1,3 +1,4 @@
+import { chatAccess } from '../../platform/chat-mode.js';
 /*
  * Twitch Chat X-Ray — Tippy.js tooltip layer.
  *
@@ -9,7 +10,7 @@
  */
 import tippy from 'tippy.js';
 import { botHue, formatNumber, formatViewerRange } from './ui-utils.js';
-import { formatPercent, getLocale, t } from '../../i18n/i18n.js';
+import { chatModeLabel, formatPercent, getLocale, t } from '../../i18n/i18n.js';
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -100,7 +101,7 @@ export function buildBadgeTooltip(model) {
 
   root.appendChild(
     head(
-      t('tip.badge.points', { score: model.score }),
+      model.neutral ? String(model.score) : t('tip.badge.points', { score: model.score }),
       model.roleExempt
         ? t('tip.badge.exempt')
         : t('tip.badge.subtitle'),
@@ -221,7 +222,9 @@ function appendAnomaly(list, event, locale) {
   const percent = outflow ? ' (' + sign + formatPercent(Math.abs(event.delta) / event.from * 100, locale) + ')' : '';
   block.appendChild(row(t(label), sign + number(Math.abs(event.delta)) + percent + duration));
   block.appendChild(row(t('tip.onlineTransition'), number(event.from) + ' → ' + number(event.to)));
-  if (Number.isFinite(event.ts)) {
+  if (event.confirmedAt && event.startedAt) {
+    block.appendChild(row(t('tip.movementTimes'), eventTime(event.startedAt) + ' → ' + eventTime(event.confirmedAt)));
+  } else if (Number.isFinite(event.ts)) {
     block.appendChild(row(t('tip.eventTime'), eventTime(event.ts)));
   }
   if (outflow) {
@@ -229,6 +232,7 @@ function appendAnomaly(list, event, locale) {
       time: eventTime(event.recoveredAt),
     })));
   }
+  if (event.raid) block.appendChild(row(t('tip.movementRaid'), eventTime(event.raid.ts) + ' · ' + number(event.raid.viewers)));
   if (event.precedingDrop) {
     const drop = event.precedingDrop;
     block.appendChild(el('div', 'tcx-tip__event-meta', t('tip.precedingDrop', {
@@ -269,26 +273,20 @@ export function buildViewerTooltip(model) {
   }
 
   const list = el('div', 'tcx-tip__list');
+  const mode = chatModeLabel(model);
+  if (model.mixedMode) {
+    const modes = (model.windowModes ?? []).map(roomMode => chatModeLabel({ roomMode, chatAccess: chatAccess(roomMode) }));
+    list.appendChild(el('div', 'tcx-tip__note', [t('tip.mixedMode'), ...new Set(modes)].join(' · ')));
+  }
+  if (mode) list.appendChild(el('div', 'tcx-tip__note', mode));
+  if (Number.isFinite(model.cleanUsers)) {
+    list.appendChild(row(t('tip.viewer.clean'),
+      t('tip.viewer.cleanValue', { clean: number(model.cleanUsers), active: number(model.activeUsers) })));
+  }
+  if (Number.isFinite(model.windowMessages)) list.appendChild(row(t('tip.windowMessages'), number(model.windowMessages)));
   if (model.engagement && Number.isFinite(model.engagement.percent)) {
     list.appendChild(row(t(model.engagement.measurable ? 'tip.viewer.er' : 'tip.viewer.erProvisional'),
       formatPercent(model.engagement.percent, locale)));
-  }
-  const baseline = model.erBaseline;
-  if (baseline) {
-    const percent = (value) => formatPercent(value, locale);
-    if (baseline.sessions >= 5 && Number.isFinite(baseline.low) && Number.isFinite(baseline.high)) {
-      list.appendChild(row(t('tip.history.typical'), t('tip.history.range', {
-        median: percent(baseline.er), low: percent(baseline.low),
-        high: percent(baseline.high), count: baseline.sessions,
-      })));
-      if (!model.stale && model.engagement?.measurable) {
-        const value = model.engagement.percent;
-        const relation = value < baseline.low ? 'low' : value > baseline.high ? 'high' : 'normal';
-        list.appendChild(row(t('tip.history.relation'), t('tip.history.' + relation)));
-      }
-    } else {
-      list.appendChild(row(t('tip.history.previous'), percent(baseline.lastEr ?? baseline.er)));
-    }
   }
   const elapsed = Math.floor((model.observationMs ?? model.sessionMs ?? 0) / 60000);
   const covered = Math.min(10, Math.floor((model.sessionMs ?? 0) / 60000));
@@ -310,23 +308,37 @@ export function buildViewerTooltip(model) {
     })));
   }
   root.appendChild(list);
-  const reasons = [t('tip.status.' + status)];
+  const reasons = [status === 'ok' && model.verdict?.key === 'clean'
+    ? t('verdict.clean') : t('tip.status.' + status)];
   if (!model.stale && model.engagement?.alert && status !== 'lowEr') {
     reasons.push(t('tip.status.lowEr'));
   }
-  if (!gathering || status !== 'waiting') {
+  if ((!gathering || status !== 'waiting') && status !== model.chatAccess) {
     root.appendChild(el('div', 'tcx-tip__status', reasons.join(' · ')));
   }
 
   if (Number.isFinite(model.stableOfficial)) {
     list.appendChild(row(t('tip.medianLabel'), number(model.stableOfficial)));
   }
-  if (Number.isFinite(model.cleanUsers)) {
-    list.appendChild(row(t('tip.viewer.clean'),
-      t('tip.viewer.cleanValue', { clean: number(model.cleanUsers), active: number(model.activeUsers) })));
-  }
   if (Number.isFinite(model.minute?.from) && Number.isFinite(model.minute?.to)) {
     list.appendChild(row(t('tip.viewer.minuteViewers'), number(model.minute.from) + ' → ' + number(model.minute.to)));
+  }
+  const baseline = model.erBaseline;
+  if (baseline) {
+    const percent = (value) => formatPercent(value, locale);
+    if (baseline.sessions >= 5 && Number.isFinite(baseline.low) && Number.isFinite(baseline.high)) {
+      list.appendChild(row(t('tip.history.typical'), t('tip.history.range', {
+        median: percent(baseline.er), low: percent(baseline.low),
+        high: percent(baseline.high), count: baseline.sessions,
+      })));
+      if (!model.stale && model.engagement?.measurable) {
+        const value = model.engagement.percent;
+        const relation = value < baseline.low ? 'low' : value > baseline.high ? 'high' : 'normal';
+        list.appendChild(row(t('tip.history.relation'), t('tip.history.' + relation)));
+      }
+    } else {
+      list.appendChild(row(t('tip.history.previous'), percent(baseline.lastEr ?? baseline.er)));
+    }
   }
   const churn = model.churn;
   list.appendChild(el('div', 'tcx-tip__event-meta', t('tip.viewer.anomalies')));
@@ -357,6 +369,16 @@ export function buildStatsTooltip(model) {
   root.appendChild(statusHead(t('stats.title'), t('stats.subtitle'), status));
   const list = el('div', 'tcx-tip__list');
   list.appendChild(row(t('stats.activeLabel'), number(model.activeUsers)));
+  if (Number.isFinite(model.topAuthorMessages) && Number.isFinite(model.audienceMessages)) {
+    const seconds = Math.min(600, Math.floor(model.sessionMs / 1000));
+    const duration = seconds % 60 ? t('tip.seconds', { count: seconds })
+      : t('tip.minutes', { minutes: seconds / 60 });
+    list.appendChild(row(t('stats.topAuthor', { duration }), model.audienceMessages
+      ? t('stats.topShare', { top: number(model.topAuthorMessages), total: number(model.audienceMessages),
+          percent: Math.round(100 * model.topAuthorMessages / model.audienceMessages) })
+      : t('stats.noMessages')));
+  }
+  if (Number.isFinite(model.neutralUsers)) list.appendChild(row(t('tip.neutral'), number(model.neutralUsers)));
   const suspicious = model.suspiciousUsers || 0;
   const percent = model.activeUsers ? Math.round(suspicious * 100 / model.activeUsers) : 0;
   list.appendChild(row(t('tip.suspiciousAuthors'),

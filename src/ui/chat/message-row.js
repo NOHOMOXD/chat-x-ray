@@ -4,6 +4,7 @@
  * the bot badge, muted/hidden classes and debug attributes.
  */
 
+import { isSuspicious } from '../../core/chat-session.js';
 import { botHue, setTextIfChanged } from '../shared/ui-utils.js';
 import { setRowHidden } from './row-visibility.js';
 import {
@@ -20,7 +21,7 @@ const AUTHOR_SELECTOR =
 
 export function resolveRowMode(record, settings) {
   const threshold = settings.suspiciousThreshold;
-  const suspicious = record.botScore >= threshold;
+  const suspicious = isSuspicious(record, threshold);
   let mode = 'none';
 
   if (suspicious) {
@@ -147,13 +148,14 @@ export class MessageRow {
     const minThreshold = Number.isFinite(threshold) ? threshold : 50;
     const hue = botHue(score, minThreshold);
     const wave = isWaveRecord(this.record);
+    const neutral = !isSuspicious(this.record, threshold);
     const groupOnly = score < threshold;
 
-    setTextIfChanged(badge, groupOnly ? 'ID' : t('tip.badge.points', { score }));
-    badge.classList.toggle('tcx-bot-badge--id-group', groupOnly);
+    setTextIfChanged(badge, groupOnly ? 'ID' : neutral ? String(score) : t('tip.badge.points', { score }));
+    badge.classList.toggle('tcx-bot-badge--id-group', neutral);
     badge.dataset.tcxScore = String(score);
     badge.style.setProperty('--tcx-bot-hue', String(hue));
-    badge.classList.toggle('tcx-bot-badge--wave', wave && !groupOnly);
+    badge.classList.toggle('tcx-bot-badge--wave', wave && !neutral);
 
     const triggers = (this.record.triggers || [])
       .filter((tr) => tr && (tr.labelKey || tr.label))
@@ -162,7 +164,7 @@ export class MessageRow {
 
     badge.setAttribute(
       'aria-label',
-      groupOnly ? t('tip.idGroups') : t('tip.badge.scoreAria', {
+      groupOnly ? t('tip.idGroups') : neutral ? t('tip.neutral') + ' ' + score : t('tip.badge.scoreAria', {
         score,
         triggers: triggers || t('tip.badge.noTriggers'),
       })
@@ -182,6 +184,7 @@ export class MessageRow {
           groupHistory: this.settings.getGroupHistory?.(this.record.numericUserId),
           observedBroadcasts: this.settings.observedBroadcasts,
           groupOnly: this.record.botScore < this.settings.suspiciousThreshold,
+          neutral: !isSuspicious(this.record, this.settings.suspiciousThreshold),
           r9kSimilarity: this.record.r9kSimilarity,
           roleExempt: this.record.roleExempt,
           clientR9K: this.settings.clientR9K,

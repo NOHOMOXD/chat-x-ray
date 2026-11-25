@@ -3,6 +3,17 @@
  * Deduplication of IRC message IDs, per-user history for rhythm/self-repeat
  * and active chatter statistics.
  */
+const BEHAVIOR_TRIGGERS = new Set(['self-repeat', 'mechanical-rhythm', 'solicitation']);
+
+export function hasSuspiciousBehavior(record) {
+  return !record.roleExempt && !record.serviceBot &&
+    record.triggers?.some(trigger => BEHAVIOR_TRIGGERS.has(trigger.key)) === true;
+}
+
+export function isSuspicious(record, threshold) {
+  return record.botScore >= threshold && hasSuspiciousBehavior(record);
+}
+
 export const DEFAULTS = Object.freeze({
   recentWindowMs: 10 * 60 * 1000,
   selfHistorySize: 5,
@@ -120,13 +131,16 @@ export class ChatSession {
     }
   }
 
-  getStats(now, since = -Infinity) {
+  getStats(now, since = -Infinity, afterSequence = 0) {
     this.prune(now);
 
     const activeUsers = new Set();
+    const scoredUsers = new Set();
     const suspiciousUsers = new Set();
     const serviceBots = new Set();
     const minuteUsers = new Set();
+    const authorMessages = new Map();
+    let topAuthorMessages = 0;
     let audienceMessages = 0;
     let windowMessages = 0;
     const freshUsers = new Set();
@@ -139,7 +153,7 @@ export class ChatSession {
     for (let i = 0; i < this.records.length; i += 1) {
       const record = this.records[i];
       // The socket boundary is local, while Twitch timestamps can precede it.
-      if (record.ts > now || record.ts < now - this.options.recentWindowMs ||
+      if (record.sequence <= afterSequence || record.ts > now || record.ts < now - this.options.recentWindowMs ||
           (record.receivedAt ?? record.ts) < since) {
         continue;
       }
@@ -153,11 +167,15 @@ export class ChatSession {
         serviceBots.add(record.userKey);
       } else {
         audienceMessages += 1;
+        const count = (authorMessages.get(record.userKey) ?? 0) + 1;
+        authorMessages.set(record.userKey, count);
+        topAuthorMessages = Math.max(topAuthorMessages, count);
       }
       if (record.freshAccount) {
         freshUsers.add(record.userKey);
       }
-      if (record.botScore >= threshold) {
+      if (record.botScore >= threshold) scoredUsers.add(record.userKey);
+      if (isSuspicious(record, threshold)) {
         suspiciousMessages += 1;
         suspiciousUsers.add(record.userKey);
       }
@@ -176,8 +194,10 @@ export class ChatSession {
       minuteUsers: minuteUsers.size,
       serviceBots: serviceBots.size,
       audienceMessages,
+      topAuthorMessages,
       activeUsers: totalActive,
       cleanUsers: cleanActive,
+      neutralUsers: scoredUsers.size - totalSuspicious,
       suspiciousUsers: totalSuspicious,
       freshUsers: freshUsers.size,
       suspiciousPercent,

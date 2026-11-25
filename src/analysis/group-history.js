@@ -1,3 +1,4 @@
+import { hasSuspiciousBehavior } from '../core/chat-session.js';
 const MAX_BROADCASTS = 20;
 const COORDINATION_BONUS = 10;
 const MIN_SHARED_SPEAKERS = 2;
@@ -100,7 +101,7 @@ export function analyzeGroupRecurrence(observation, previousBroadcasts) {
 }
 
 export function applyGroupHistoryBonus(record, recurrence) {
-  if (!record.unbadged || record.roleExempt || record.serviceBot ||
+  if (!record.unbadged || !hasSuspiciousBehavior(record) ||
       !recurrence?.authors[record.numericUserId]?.coordinatedBroadcasts ||
       record.triggers.some((trigger) => trigger.key === 'group-recurrence')) return;
   record.triggers.push({
@@ -110,4 +111,5 @@ export function applyGroupHistoryBonus(record, recurrence) {
     points: COORDINATION_BONUS,
   });
   record.botScore = Math.min(100, record.botScore + COORDINATION_BONUS);
+  return true;
 }

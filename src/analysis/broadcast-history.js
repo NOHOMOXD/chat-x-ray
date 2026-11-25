@@ -3,14 +3,15 @@ import { medianNumber } from './er-baseline.js';
 
 export const BROADCAST_HISTORY_KEY = 'tcx:broadcastHistory:v1';
 export const HISTORY_CLEAR_KEY = 'tcx:broadcastHistory:clearedAt';
-export const SCORING_RULE_VERSION = 1;
+export const SCORING_RULE_VERSION = 3;
 const MAX_BROADCASTS_PER_CHANNEL = 20;
 const MAX_STORE_BYTES = 4 * 1024 * 1024;
 const MINUTE = 60000;
 const MAX_GROUP_WINDOWS = 240;
 
 export function broadcastProfile(settings) {
-  return [SCORING_RULE_VERSION, Number(settings.suspiciousThreshold), Number(Boolean(settings.accountAgeLookup))].join(':');
+  return [SCORING_RULE_VERSION, Number(settings.suspiciousThreshold),
+    Number(Boolean(settings.accountAgeLookup)), settings.roomProfile ?? 'unknown'].join(':');
 }
 
 export function broadcastKey({ channel, id, startedAt }) {
@@ -79,7 +80,7 @@ function coalesceEvents(previous, next) {
         lowTs: low.lowTs,
         delta: low.delta,
       };
-    } else if (event.authors > existing.authors) {
+    } else if ((event.kind === 'surge' && event.to > existing.to) || event.authors > existing.authors) {
       merged[index] = event;
     }
   }

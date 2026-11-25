@@ -150,3 +150,12 @@ it('extracts a raid from USERNOTICE with server time and the announced raid size
   ]);
   expect(parseFrame(frame.replace('msg-id=raid', 'msg-id=sub'), 1500)).toEqual([]);
 });
+
+it('preserves partial ROOMSTATE updates, including zero follower delay', () => {
+  const parse = tags => parseFrame('@' + tags + ' :tmi.twitch.tv ROOMSTATE #Example')[0];
+  expect(parse('subs-only=0;followers-only=0;slow=5;emote-only=1')).toMatchObject({
+    kind: 'room-state', channel: 'example', mode: { subscribers: 0, followers: 0, slow: 5, emotes: 1 },
+  });
+  expect(parse('slow=0;subs-only=abc')).toMatchObject({ mode: { slow: 0 } });
+  expect(parse('followers-only=-2')).toBeUndefined();
+});

@@ -9,19 +9,13 @@ import json
 import glob
 import os
 import re
+import subprocess
 import statistics
 import sys
 from collections import Counter, defaultdict
 
 LOG_DIR = sys.argv[1] if len(sys.argv) > 1 else 'testing_logs'
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'tools/audit-aggregate.json'
-
-SURGE_MS = 120000
-SURGE_SHARE = 0.15
-SURGE_MIN = 3000          # docs/algorithm.md: surge needs >=15% AND >=3000 viewers / 2 min
-DROP_SHARE = 0.15
-MIN_SAMPLES_WINDOW = 8    # a 2-min window needs >=8 samples to be trusted (~1.5 s cadence)
-
 
 def iso(ms):
     return datetime.datetime.fromtimestamp(ms / 1000, datetime.timezone.utc).strftime('%H:%M:%S')
@@ -80,100 +74,33 @@ def chat_rate(msgs, a, b, coverage_start, coverage_end):
     }
 
 
-def detect_viewer_moves(samples, rate, window_ms=SURGE_MS):
-    """Reference = oldest sample inside the window; compare each later sample to it."""
-    samples = sorted(samples, key=lambda s: s['ts'])
-    # Candidate episodes: the largest qualifying move per direction, measured from
-    # the oldest sample inside the 2-minute window. Nearby candidates that keep the
-    # same reference point are merged into one episode so a slide is not reported
-    # once per sample.
-    cand = []
-    for i, ref in enumerate(samples):
-        best = None
-        for s in samples[i + 1:]:
-            if s['ts'] - ref['ts'] > window_ms:
-                break
-            d = s['value'] - ref['value']
-            share = d / ref['value'] if ref['value'] else 0
-            need = SURGE_SHARE if d > 0 else DROP_SHARE
-            if abs(share) >= need and (best is None or abs(d) > abs(best['value'] - ref['value'])):
-                best = s
-        if best is None:
-            continue
-        d = best['value'] - ref['value']
-        if d > 0 and d < SURGE_MIN:
-            continue          # docs: a surge also needs >=3000 viewers
-        cand.append((ref, best, d))
-
-    episodes = []
-    for ref, best, d in cand:
-        kind = 'surge' if d > 0 else 'drop'
-        for ep in episodes:
-            same_ref = abs(ep['fromTs'] - ref['ts']) <= window_ms
-            if ep['kind'] == kind and same_ref:
-                if abs(d) > abs(ep['delta']):
-                    ep.update({'fromTs': ref['ts'], 'toTs': best['ts'], 'delta': d})
-                ep['fromTs'] = min(ep['fromTs'], ref['ts'])
-                ep['toTs'] = max(ep['toTs'], best['ts'])
-                ep['refs'].append(ref)
-                ep['ends'].append(best)
-                break
-        else:
-            episodes.append({'kind': kind, 'fromTs': ref['ts'], 'toTs': best['ts'],
-                             'delta': d, 'refs': [ref], 'ends': [best]})
-
-    moves = []
-    for ep in episodes:
-        # small slides of a few % are noise for this audit: keep >=8%
-        if abs(ep['delta']) / (ep['refs'][0]['value'] or 1) < 0.08 and ep['delta'] < SURGE_MIN:
-            continue
-        ref = next((r for r in ep['refs'] if r['ts'] == ep['fromTs']), ep['refs'][0])
-        end = next((e for e in ep['ends'] if e['ts'] == ep['toTs']), ep['ends'][0])
+def replay_movements(name, rate):
+    tool = os.path.join(os.path.dirname(__file__), 'analyze-capture.mjs')
+    report = json.loads(subprocess.check_output([
+        'node', tool, '--snapshot', os.path.join(LOG_DIR, name), '--movements',
+    ]))
+    moves, churn = [], []
+    for event in report['surges'] + report['outflows']:
+        start = event['fromTs']
+        end = event.get('peakTs') or event['lowTs']
         moves.append({
-            'kind': ep['kind'],
-            'fromTs': ep['fromTs'], 'fromTime': iso(ep['fromTs']), 'fromViewers': ref['value'],
-            'toTs': ep['toTs'], 'toTime': iso(ep['toTs']), 'toViewers': end['value'],
-            'delta': ep['delta'],
-            'pct': round(ep['delta'] / ref['value'] * 100, 1) if ref['value'] else None,
-            'minutes': round((ep['toTs'] - ep['fromTs']) / 60000.0, 2),
-            'peakValue': max(r['value'] for r in ep['refs']),
-            'chatRateBefore': rate(ep['fromTs'] - window_ms, ep['fromTs']),
-            'chatRateDuring': rate(ep['fromTs'], ep['toTs']),
-            'chatRateAfter': rate(ep['toTs'], ep['toTs'] + window_ms),
+            **event, 'kind': 'surge' if event['delta'] > 0 else 'drop',
+            'fromTime': iso(start), 'fromViewers': event['from'],
+            'toTs': end, 'toTime': iso(end), 'toViewers': event['to'],
+            'pct': round(100 * event['delta'] / event['from'], 1) if event['from'] else None,
+            'minutes': round((end - start) / 60000, 2), 'peakValue': max(event['from'], event['to']),
+            'chatRateBefore': rate(start - 120000, start), 'chatRateDuring': rate(start, end),
+            'chatRateAfter': rate(end, end + 120000),
         })
-    moves.sort(key=lambda m: m['fromTs'])
-    return moves
-
-
-def detect_churn(samples, rate):
-    """Replicates ViewerHistory churn detection: peak within the last 3 min -> a
-    drop of >=max(300, 4%) held for >=15 s -> recovery to within 2% of the peak.
-    Only used as a cross-check: the engine's own events list is authoritative."""
-    drop_ratio, drop_abs, peak_win = 0.04, 300, 180000
-    rec_ratio, rec_win, confirm = 0.02, 300000, 15000
-    samples = sorted(samples, key=lambda s: s['ts'])
-    state, out = None, []
-    for s in samples:
-        now, value = s['ts'], s['value']
-        recent = [x for x in samples if now - peak_win <= x['ts'] <= now]
-        peak = max(recent, key=lambda x: (x['value'], x['ts']))
-        if state and now - state['at'] > rec_win:
-            state = None
-        if state is None:
-            if peak['ts'] < now and peak['value'] - value >= max(drop_abs, peak['value'] * drop_ratio):
-                state = {'from': peak['value'], 'fromTs': peak['ts'], 'at': now, 'low': value}
-            continue
-        if value <= state['low']:
-            state['low'] = value
-        if value >= state['from'] * (1 - rec_ratio):
-            if now - state['at'] >= confirm:
-                out.append({'from': state['from'], 'low': state['low'], 'drop': state['from'] - state['low'],
-                            'recovered': value, 'fromTime': iso(state['fromTs']), 'lowTime': iso(s['ts']),
-                            'recoveredTime': iso(now), 'durationS': round((now - state['at']) / 1000, 1),
-                            'chatRateDuring': rate(state['fromTs'], now),
-                            'chatRateAfter': rate(now, now + 120000)})
-            state = None
-    return out
+        if event.get('recoveredAt'):
+            recovered = event['recoveredAt']
+            churn.append({
+                **event, 'low': event['to'], 'drop': -event['delta'], 'fromTime': iso(start),
+                'lowTime': iso(end), 'recoveredTime': iso(recovered),
+                'durationS': (recovered - event['startedAt']) / 1000,
+                'chatRateDuring': rate(start, recovered), 'chatRateAfter': rate(recovered, recovered + 120000),
+            })
+    return sorted(moves, key=lambda move: move['fromTs']), churn
 
 
 def engine_events(sess, rate):
@@ -240,6 +167,7 @@ def summarize(name, sess):
     )
     samples = sess.get('viewerSamples') or []
     series, gaps = viewer_series(samples)
+    moves, churn = replay_movements(name, rate)
     values = [s['value'] for s in samples]
 
     # ---- authors
@@ -274,7 +202,7 @@ def summarize(name, sess):
     r9k_on = settings_value(sess, 'clientR9K')
     score_on = settings_value(sess, 'muteSuspicious') or settings_value(sess, 'hideSuspicious')
     rej_r9k = [m for m in msgs if m.get('isR9KDuplicate') or m.get('spamFlood')]
-    rej_score = [m for m in msgs if (m.get('botScore') or 0) >= thr]
+    rej_score = [m for m in msgs if m.get('suspicious', (m.get('botScore') or 0) >= thr)]
     both = [m for m in msgs if m in rej_r9k and m in rej_score]
     union = [m for m in msgs if m in rej_r9k or m in rej_score]
 
@@ -361,8 +289,8 @@ def summarize(name, sess):
         'model': {'verdict': (model.get('verdict') or {}), 'official': model.get('official'),
                   'range': model.get('range')},
         'events': sess.get('events') or [],
-        'moves': [move for chunk in series for move in detect_viewer_moves(chunk, rate)],
-        'churn': detect_churn(samples, rate),
+        'moves': moves,
+        'churn': churn,
         'engineEvents': engine_events(sess, rate),
         'viewer30s': viewer_shape(samples),
         'minuteSummary': minute_rows(sess),
@@ -568,7 +496,7 @@ def filter_leaks():
                 continue
             if m.get('isR9KDuplicate') or m.get('spamFlood'):
                 continue
-            if (m.get('botScore') or 0) >= thr:
+            if m.get('suspicious', (m.get('botScore') or 0) >= thr):
                 continue
             leaks[(data['channel'], m.get('userKey'), key)].append(m['ts'])
     rows = []

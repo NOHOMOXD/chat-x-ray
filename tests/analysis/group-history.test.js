@@ -46,12 +46,13 @@ it('stores hashed phrases, counts identical broadcast IDs once and tracks precis
   });
   const messages = first.map((id) => record(id, phrase));
   messages[0].botScore = 95;
+  messages[0].triggers.push({ key: 'self-repeat' });
   for (const message of messages) {
     applyGroupHistoryBonus(message, recurrence);
     applyGroupHistoryBonus(message, recurrence);
   }
-  expect(messages.map(({ botScore }) => botScore)).toEqual([100, 35, 25, 25, 25, 25]);
-  expect(messages[0].triggers).toHaveLength(1);
+  expect(messages.map(({ botScore }) => botScore)).toEqual([100, 25, 25, 25, 25, 25]);
+  expect(messages[0].triggers).toHaveLength(2);
 });
 
 it('rejects a channel-wide phrase and requires the same speakers across broadcasts', async () => {

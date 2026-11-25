@@ -326,3 +326,41 @@ it('counts boosted messages and unique authors, with 30 seconds of indication fr
   analyzer.reset();
   expect(analyzer.getStats(time + 30_000)).toMatchObject({ waveCount: 0, lastWave: null });
 });
+
+it('keeps a first greeting clean through age lookup and applies threshold changes to the same window', () => {
+  const analyzer = new Analyzer({ enableAuditLog: true });
+  const msg = message({ login: 'newcomer', badges: [], color: '', firstMsg: true, text: 'привет' });
+  analyzer.ingest(msg, msg.ts);
+  analyzer.applyAccountAge(msg.login, 2);
+  expect(analyzer.getStats(msg.ts)).toMatchObject({ cleanUsers: 1, suspiciousUsers: 0 });
+  expect(analyzer.logger.count()).toBe(0);
+  for (const step of [1, 2]) {
+    analyzer.ingest({ ...msg, id: 'repeat' + step, ts: msg.ts + step, firstMsg: false }, msg.ts + step);
+  }
+  expect(analyzer.getStats(msg.ts + 2)).toMatchObject({ cleanUsers: 0, suspiciousUsers: 1 });
+  analyzer.updateOptions({ suspiciousThreshold: 100 });
+  expect(analyzer.getStats(msg.ts + 2)).toMatchObject({ cleanUsers: 1, suspiciousUsers: 0 });
+});
+
+it.each([true, false])('measures concentration before filters and excludes service messages (%s)', concentrated => {
+  const analyzer = new Analyzer();
+  const start = 2_000_000;
+  for (let i = 0; i < 300; i++) {
+    const id = concentrated ? (i < 200 ? 0 : 1 + i % 59) : i % 60;
+    analyzer.ingest(message({ userId: String(id + 1), ts: start + i, text: 'hello' }), start + i);
+  }
+  analyzer.ingest(message({ login: 'nightbot', ts: start + 300 }), start + 300);
+  const stats = analyzer.getStats(start + 300);
+  expect(stats).toMatchObject({ topAuthorMessages: concentrated ? 200 : 5, audienceMessages: 300 });
+  expect(analyzer.getStats(start + 300, start + 300)).toMatchObject({ topAuthorMessages: 0, audienceMessages: 0 });
+});
+
+it('separates messages before and after a mode change within the same IRC frame', () => {
+  const analyzer = new Analyzer();
+  const ts = 2_000_000;
+  analyzer.ingest(message({ ts }), ts);
+  const boundary = analyzer.totalMessages;
+  analyzer.ingest(message({ ts }), ts);
+  expect(analyzer.getStats(ts, ts, boundary)).toMatchObject({ cleanUsers: 1, windowMessages: 1 });
+  expect(analyzer.getStats(ts, ts)).toMatchObject({ cleanUsers: 2, windowMessages: 2 });
+});

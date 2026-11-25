@@ -1,3 +1,4 @@
+import { parseRoomMode } from './chat-mode.js';
 /*
  * Twitch Chat X-Ray — IRCv3 parser.
  * Dependency-free RFC1459/IRCv3 message parser.
@@ -227,6 +228,16 @@ export function parsePrivmsg(line, fallbackTimestamp) {
   };
 }
 
+function parseRoomState(line, receivedAt) {
+  if (!line.includes(' ROOMSTATE ')) return null;
+  const parsed = parseIrcLine(line);
+  if (parsed?.command !== 'ROOMSTATE' || !/^#\w+$/.test(parsed.params[0])) return null;
+  const mode = parseRoomMode(parsed.tags);
+  return Object.keys(mode).length
+    ? { kind: 'room-state', receivedAt, channel: parsed.params[0].slice(1).toLowerCase(), mode }
+    : null;
+}
+
 export function parseFrame(rawFrame, fallbackTimestamp) {
   if (typeof rawFrame !== 'string' || !rawFrame) {
     return [];
@@ -237,7 +248,7 @@ export function parseFrame(rawFrame, fallbackTimestamp) {
   const messages = [];
 
   for (let i = 0; i < lines.length; i += 1) {
-    const message = parsePrivmsg(lines[i], now) || parseRaid(lines[i], now);
+    const message = parsePrivmsg(lines[i], now) || parseRaid(lines[i], now) || parseRoomState(lines[i], now);
     if (message) {
       messages.push(message);
     }

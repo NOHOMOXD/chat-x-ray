@@ -14,7 +14,7 @@ import {
 /** A comfortable 10-minute sample: 1000 clean of 1200 active chatters. */
 function stats(overrides = {}) {
   return {
-    activeUsers: 1200,
+    chatAccess: 'open', activeUsers: 1200,
     cleanUsers: 1000,
     suspiciousUsers: 200,
     suspiciousPercent: 17,
@@ -247,3 +247,17 @@ it.each([[9500, 11000, 9500], [11000, 9500, 9500], [9500, undefined, 9500]])(
     expect(model.stableOfficial).toBe(median ?? official);
   },
 );
+
+it.each(['unknown', 'subscribers'])('keeps facts and surges in a %s chat', chatAccess => {
+  const model = buildViewerModel({ official: 5000,
+    stats: stats({ chatAccess, cleanUsers: 40 }), history: { totalSurges: 2 } });
+  expect(model).toMatchObject({ official: 5000, cleanUsers: 40, range: expect.any(Object),
+    engagement: { percent: 0.8, alert: false }, erBaseline: null, churn: { totalSurges: 2 } });
+});
+
+it('retains the low engagement warning even when five previous broadcasts look the same', () => {
+  const baseline = { er: 0.8, low: 0.7, high: 1, sessions: 5 };
+  const model = buildViewerModel({ official: 10000, stats: stats({ cleanUsers: 80 }), baseline });
+  expect(model).toMatchObject({ erBaseline: baseline, engagement: { percent: 0.8, alert: true },
+    verdict: { key: 'low-er' } });
+});

@@ -18,7 +18,7 @@ import {
   clamp,
 } from './text-analysis.js';
 import { BotWaveTracker } from './bot-wave-tracker.js';
-import { ChatSession } from './chat-session.js';
+import { ChatSession, isSuspicious } from './chat-session.js';
 import { BotLogger } from '../config/bot-logger.js';
 import { IdClusterIndex } from './id-cluster-index.js';
 
@@ -196,8 +196,19 @@ export class Analyzer {
     return this.waves.isBotWave;
   }
 
+  auditRecord(record) {
+    if (!this.options.enableAuditLog) return;
+    const suspicious = isSuspicious(record, this.options.suspiciousThreshold);
+    if (suspicious || record.isR9KDuplicate || record.spamFlood) {
+      this.logger.add(record, suspicious);
+    } else {
+      this.logger.remove(record.id);
+    }
+  }
+
   updateOptions(options) {
     Object.assign(this.options, options || {});
+    this.session.options.suspiciousThreshold = this.options.suspiciousThreshold;
   }
 
   _prune(now) {
@@ -392,6 +403,7 @@ export class Analyzer {
         record.freshAccount = false;
         changed = true;
       }
+      this.auditRecord(record);
     }
 
     return changed;
@@ -618,6 +630,7 @@ export class Analyzer {
       id: id || 'local:' + userKey + ':' + ts + ':' + this.totalMessages,
       ts,
       receivedAt: message.receivedAt ?? currentTime,
+      sequence: this.totalMessages + 1,
       serverTimestamp: message.serverTimestamp === true,
       channel: String(message.channel || '').toLowerCase(),
       userId: Number.isSafeInteger(numericUserId) ? numericUserId : null,
@@ -681,6 +694,7 @@ export class Analyzer {
       const { bucket } = waveInfo;
       for (const entry of waveInfo.waveTriggered ? bucket.records : [record]) {
         if (this._applyWaveBoost(entry)) {
+          this.auditRecord(entry);
           bucket.authors.add(entry.userKey);
           bucket.event.messages += 1;
         }
@@ -701,15 +715,7 @@ export class Analyzer {
       };
     }
 
-    // Save to audit log if enabled and meets criteria
-    if (
-      this.options.enableAuditLog &&
-      (record.botScore >= this.options.suspiciousThreshold ||
-        record.isR9KDuplicate ||
-        record.spamFlood)
-    ) {
-      this.logger.add(record);
-    }
+    this.auditRecord(record);
 
     return {
       record,
@@ -719,11 +725,11 @@ export class Analyzer {
     };
   }
 
-  getStats(now, since) {
+  getStats(now, since, afterSequence) {
     const currentTime = Number.isFinite(now) ? now : Date.now();
     this._prune(currentTime);
 
-    const stats = this.session.getStats(currentTime, since);
+    const stats = this.session.getStats(currentTime, since, afterSequence);
     if (!this.idGroupSnapshot || currentTime - this.idGroupSnapshot.ts >= 60000) {
       const groups = findIdGroups(recordsAt(this.session.records, currentTime));
       this.idGroupSnapshot = {

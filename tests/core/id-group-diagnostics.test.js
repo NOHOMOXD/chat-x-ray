@@ -37,7 +37,7 @@ it('counts R9K sources and measures distinct authors using the same phrase', () 
 
 it('replaces the cluster weight in the exported comparison and applies the same age rule', async () => {
   const { compareIdGroupScores } = await import('../../src/analysis/session-capture.js');
-  const unbadged = { points: 25, key: 'profile' };
+  const unbadged = { points: 20, key: 'profile' };
   const cluster = { points: 15, key: 'id-cluster' };
   const fresh = { points: 10, key: 'fresh-account' };
   const records = [1, 2, 3, 4, 5, 6].map((id) => user(id, { triggers: [unbadged] }));
@@ -46,6 +46,7 @@ it('replaces the cluster weight in the exported comparison and applies the same 
   records.push(user(200000, {
     triggers: [unbadged], accountAgeSource: 'api', accountAgeDays: 89,
   }));
+  for (const row of records) row.triggers.push({ key: 'mechanical-rhythm', points: 5 });
   const result = compareIdGroupScores(records, now, { suspiciousThreshold: 30 });
   expect(result.comparison.crossings).toEqual({
     both: ['user1', 'user200000'], currentOnly: ['user100000'],

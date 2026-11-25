@@ -29,7 +29,7 @@ const SETTINGS = {
 function record(overrides = {}) {
   return {
     botScore: 10,
-    triggers: [],
+    triggers: [{ key: 'self-repeat' }],
     isR9KDuplicate: false,
     spamFlood: false,
     roleExempt: false,
@@ -121,7 +121,7 @@ describe('resolveRowMode', () => {
 
 describe('isWaveRecord', () => {
   it('detects the wave bonus', () => {
-    expect(isWaveRecord(record({ waveBoost: true, triggers: [{ key: 'wave' }] }))).toBe(
+    expect(isWaveRecord(record({ waveBoost: true, triggers: [{ key: 'wave' }, { key: 'self-repeat' }] }))).toBe(
       true
     );
     expect(isWaveRecord(record({ botScore: 50, triggers: [{ key: 'id-cluster' }] }))).toBe(
@@ -181,7 +181,7 @@ describe('MessageRow', () => {
     const row = makeRow();
     new MessageRow(
       row,
-      record({ botScore: 45, waveBoost: true, triggers: [{ key: 'wave' }] })
+      record({ botScore: 45, waveBoost: true, triggers: [{ key: 'wave' }, { key: 'self-repeat' }] })
     ).apply(SETTINGS);
     expect(row.dataset.tcxWave).toBe('1');
     expect(row.querySelector('.tcx-bot-badge').classList.contains('tcx-bot-badge--wave')).toBe(
@@ -201,4 +201,12 @@ describe('MessageRow', () => {
     expect(row.classList.contains('tcx-hidden')).toBe(false);
     expect(row.dataset.tcxBound).toBe(undefined);
   });
+});
+
+it('shows a neutral score badge without hiding a high-scoring newcomer', () => {
+  const row = makeRow();
+  const view = new MessageRow(row, record({ botScore: 60, triggers: [{ key: 'first-msg' }] }));
+  view.apply({ ...SETTINGS, hideSuspicious: true, getIdGroup: () => ({ memberIds: [1, 2] }) });
+  expect(row.querySelector('.tcx-bot-badge').textContent).toBe('60');
+  expect(isRowHidden(row)).toBe(false);
 });

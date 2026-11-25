@@ -149,3 +149,17 @@ it('retains the last full measurement during partial coverage after reopening', 
   });
   expect(reopened.checkpoint.lastViewerModel).toEqual(measured);
 });
+
+it('isolates room settings and old scoring versions without deleting observations', async () => {
+  const persistence = sharedPersistence();
+  const old = { channel: 'example', ...identity(1), profiles: { '1:30:0': [{ ts: 10, er: 80 }] },
+    checkpoint: { groups: [] } };
+  await persistence.storage.set({ 'tcx:broadcastHistory:v1': [old] });
+  const store = new BroadcastHistory(persistence);
+  const normal = { ...settings, roomProfile: '0/-1/0/0/0' };
+  expect((await store.load(identity(2), normal)).baseline).toBeNull();
+  await store.save(identity(2), normal, { samples: [{ ts: 60_000, er: 0.8 }] });
+  expect((await store.load(identity(3), normal)).baseline?.lastEr).toBe(0.8);
+  expect((await store.load(identity(3), { ...normal, roomProfile: '0/-1/5/0/0' })).baseline).toBeNull();
+  expect((await store.read()).find(item => item.id === old.id).profiles).toEqual(old.profiles);
+});

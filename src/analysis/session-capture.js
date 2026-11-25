@@ -1,8 +1,14 @@
+import { hasSuspiciousBehavior, isSuspicious } from '../core/chat-session.js';
 import { ID_GROUP_RULE, describeGroups, findIdGroups, recordsAt } from '../core/id-group-diagnostics.js';
 import { DEFAULTS as ANALYZER_DEFAULTS, WEIGHTS } from '../core/analyzer.js';
 import { estimateViewerRange } from './viewer-estimate.js';
 
 const WINDOW_MS = 600000;
+
+export function estimateWindow(records, stats) {
+  return records.filter(record => (record.receivedAt ?? record.ts) >= (stats.windowSince ?? -Infinity) &&
+    (record.sequence ?? Infinity) > (stats.afterSequence ?? 0));
+}
 
 export function summarizeRecords(records, settings, scaleOptions) {
   const authors = new Map();
@@ -12,15 +18,17 @@ export function summarizeRecords(records, settings, scaleOptions) {
     const key = record.userKey;
     const author = authors.get(key) || { score: 0, undiscounted: 0 };
     const discount = record.triggers.find((item) => item.key === 'veteran-account');
-    author.score = Math.max(author.score, record.botScore);
-    author.undiscounted = Math.max(author.undiscounted, record.botScore - (discount?.points || 0));
+    if (hasSuspiciousBehavior(record)) {
+      author.score = Math.max(author.score, record.botScore);
+      author.undiscounted = Math.max(author.undiscounted, record.botScore - (discount?.points || 0));
+    }
     author.serviceBot ||= record.serviceBot;
     author.ageSource = record.accountAgeSource === 'api' ? 'api' :
       (author.ageSource || record.accountAgeSource || 'unknown');
     authors.set(key, author);
 
     const scoreAction = (settings.muteSuspicious || settings.hideSuspicious) &&
-      record.botScore >= settings.suspiciousThreshold;
+      isSuspicious(record, settings.suspiciousThreshold);
     const r9kAction = settings.clientR9K && (record.isR9KDuplicate || record.spamFlood);
     if (scoreAction || r9kAction) {
       actions[scoreAction && r9kAction ? 'both' : scoreAction ? 'scoreOnly' : 'r9kOnly'] += 1;
@@ -59,6 +67,8 @@ export function compareIdGroupScores(records, ts, settings, model, stats) {
   for (const record of window) {
     if (record.serviceBot) continue;
     const author = authors.get(record.userKey) || { current: 0, experimental: 0 };
+    authors.set(record.userKey, author);
+    if (!hasSuspiciousBehavior(record)) continue;
     const eligible = record.unbadged && !record.color && !record.roleExempt;
     const confirmedFresh = eligible && record.accountAgeSource === 'api' &&
       Number.isFinite(record.accountAgeDays) && record.accountAgeDays < ANALYZER_DEFAULTS.freshAccountAgeDays;
@@ -70,7 +80,6 @@ export function compareIdGroupScores(records, ts, settings, model, stats) {
       ? WEIGHTS.idCluster : 0;
     author.current = Math.max(author.current, Math.min(100, base + currentPoints));
     author.experimental = Math.max(author.experimental, Math.min(100, base + experimentalPoints));
-    authors.set(record.userKey, author);
   }
 
   const threshold = settings.suspiciousThreshold;
@@ -134,13 +143,13 @@ export class SessionCapture {
       return;
     }
     this.lastMinute += Math.floor((now - this.lastMinute) / 60000) * 60000;
-    const window = this.window(now, records);
+    const window = estimateWindow(this.window(now, records), stats);
     this.minutes.push({
       ts: now,
       minute,
       stats,
       model,
-      idGroupAudit: compareIdGroupScores(records, now, settings, model, stats),
+      idGroupAudit: compareIdGroupScores(window, now, settings, model, stats),
       diagnostics: Math.min(now - this.startedAt, stats.sessionMs) >= WINDOW_MS
         ? summarizeRecords(window, settings, {
             official: model?.official, stableOfficial: model?.stableOfficial, stats,
@@ -151,9 +160,12 @@ export class SessionCapture {
 
   snapshot(now, records, stats, model, settings) {
     this.recordModel(model);
-    const window = this.window(now, records).map(({ login, displayName, normalized, ...record }) => record);
+    const messages = this.window(now, records).map(({ login, displayName, normalized, ...record }) => ({
+      ...record, suspicious: isSuspicious(record, settings.suspiciousThreshold),
+    }));
+    const window = estimateWindow(messages, stats);
     return {
-      schemaVersion: 1,
+      schemaVersion: 3,
       id: this.id,
       channel: this.channel,
       startedAt: new Date(this.startedAt).toISOString(),
@@ -167,8 +179,8 @@ export class SessionCapture {
         durationMs: Math.min(WINDOW_MS, now - this.startedAt, stats.sessionMs),
         stats,
         model: model?.stale ? null : model,
-        messages: window,
-        idGroupAudit: compareIdGroupScores(records, now, settings, model, stats),
+        messages,
+        idGroupAudit: compareIdGroupScores(window, now, settings, model, stats),
         diagnostics: summarizeRecords(window, settings, {
           official: model?.official, stableOfficial: model?.stableOfficial, stats,
         }),

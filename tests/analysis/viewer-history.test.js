@@ -73,11 +73,15 @@ describe('ViewerHistory', () => {
   });
 });
 
+function seed(history, start, value) {
+  for (const offset of [-18000, -12000, -6000, 0]) history.record(value, start + offset);
+}
+
 describe('viewer anomalies', () => {
   const start = 1_000_000;
   const scenario = (recoveryDelay) => {
     const history = new ViewerHistory();
-    history.record(50_000, start);
+    seed(history, start, 50_000);
     history.record(40_000, start + 30_000);
     for (let age = 60_000; age < recoveryDelay; age += 30_000) {
       history.record(40_000, start + 30_000 + age);
@@ -94,7 +98,7 @@ describe('viewer anomalies', () => {
 
   it('does not recover a pending drop across missing samples', () => {
     const history = new ViewerHistory();
-    history.record(50_000, start);
+    seed(history, start, 50_000);
     history.record(40_000, start + 30_000);
     history.record(50_000, start + 120_000);
     expect(history.getStats(start + 120_000).totalChurnEvents).toBe(0);
@@ -105,20 +109,22 @@ describe('viewer anomalies', () => {
     const raid = { id: 'raid', ts: start + 5_000, viewers: 2 };
     expect(history.recordRaid(raid)).toBe(true);
     expect(history.recordRaid(raid)).toBe(false);
-    history.record(20_000, start);
+    seed(history, start, 20_000);
+    history.record(23_000, start + 15_000);
     const { anomaly } = history.record(23_000, start + 30_000, {
       countMessages: (from) => from < start ? 20 : 5,
     });
     expect(anomaly).toMatchObject({ kind: 'surge', delta: 3000, rateRatio: 1, raid });
     history.record(30_000, start + 40_000);
     expect(history.getStats(start + 16 * MINUTE)).toMatchObject({
-      totalSurges: 1, averageSurge: 3000, lastAnomaly: anomaly,
+      totalSurges: 1, averageSurge: 10000, lastAnomaly: anomaly,
     });
   });
 
   it('preserves cumulative rollbacks and removes old events from the current verdict', () => {
     const history = new ViewerHistory();
-    for (const [offset, value] of [[0, 50_000], [30_000, 40_000], [60_000, 50_000]]) {
+    seed(history, start, 50_000);
+    for (const [offset, value] of [[0, 50_000], [30_000, 40_000], [45_000, 40_000], [60_000, 50_000]]) {
       history.record(value, start + offset);
     }
     expect(history.getStats(start + 17 * MINUTE)).toMatchObject({
@@ -133,6 +139,7 @@ describe('viewer outflows', () => {
 
   it('retains the shadowkekw drop and its deepest sample after the deadline', () => {
     const history = new ViewerHistory();
+    seed(history, start, 44_493);
     let recorded;
     const samples = [
       [0, 44_493], [19_643, 41_262], [36_000, 40_652], [66_000, 36_801],
@@ -152,7 +159,7 @@ describe('viewer outflows', () => {
 
   it('ignores a single low sample and closes a confirmed episode on interruption', () => {
     const history = new ViewerHistory();
-    history.record(40_000, start);
+    seed(history, start, 40_000);
     history.record(30_000, start + 3000);
     history.record(40_000, start + 6000);
     expect(history.getStats(start + 6000).totalOutflows).toBe(0);
@@ -167,6 +174,7 @@ describe('viewer outflows', () => {
 
   it('attaches the IShowSpeed recovery to the same event', () => {
     const history = new ViewerHistory();
+    seed(history, start, 37312);
     const samples = [[0, 37312], [3000, 34149], [19000, 34149], [59000, 32233],
       [110000, 32800], [160000, 33700], [210000, 35000], [260000, 36568]];
     for (const [offset, value] of samples) history.record(value, start + offset);
@@ -194,4 +202,22 @@ it('restores journal totals idempotently and treats a saved open outflow as inte
   });
   history.record(20000, base + 50000);
   expect(history.getStats(base + 50000)).toMatchObject({ totalSurges: 1 });
+});
+
+it.each([
+  [20, 40, false], [40, 15, false], [3600, 4100, false],
+  [3690, 5139, true], [47000, 50000, true],
+])('confirms sustained movements symmetrically between %i and %i', (a, b, expected) => {
+  const start = 1000000;
+  for (const [from, to] of [[a, b], [b, a]]) {
+    const history = new ViewerHistory();
+    seed(history, start, from);
+    history.record(to, start + 3000);
+    history.record(to, start + 18000);
+    const stats = history.getStats(start + 18000);
+    expect(stats.totalOutflows + stats.totalSurges).toBe(Number(expected));
+    if (expected) expect(stats.lastOutflow ?? stats.lastSurge).toMatchObject({
+      from, to, startedAt: start + 3000, confirmedAt: start + 18000,
+    });
+  }
 });

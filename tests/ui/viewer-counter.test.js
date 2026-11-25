@@ -108,7 +108,7 @@ describe('viewer popover observations', () => {
 it('shows the shared progress, then a provisional and a full viewer range', async () => {
   const { buildViewerModel } = await import('../../src/analysis/viewer-estimate.js');
   const { buildViewerTooltip } = await import('../../src/ui/shared/tooltip-controller.js');
-  const model = (stats) => buildViewerModel({ official: 180_000, stats });
+  const model = (stats) => buildViewerModel({ official: 180_000, stats: { chatAccess: 'open', ...stats } });
   const starting = model({ sessionMs: 30_000, cleanUsers: 0, windowMessages: 0 });
   const progress = buildViewerTooltip(starting);
   expect(progress.querySelector('.tcx-tip__hero-value').textContent)
@@ -122,8 +122,8 @@ it('shows the shared progress, then a provisional and a full viewer range', asyn
   expect(preliminary.querySelector('.tcx-tip__hero-value--range')).toBeTruthy();
   expect(preliminary.querySelector('.tcx-tip__hero-caption').textContent).toContain('Предварительно');
   const complete = buildViewerTooltip(model({ ...ready, sessionMs: 600_000 }));
-  expect(complete.querySelector('.tcx-tip__hero-caption').textContent).toBe('Оценка по чату');
-  expect(complete.textContent).toContain('чат за последние 10 мин');
+  expect(complete.querySelector('.tcx-tip__hero-caption').textContent).toBe('Оценка по активности чата');
+  expect(complete.textContent).toContain('Полное окно наблюдения — 10 минут');
 
   const disconnected = buildViewerTooltip({ ...starting, viewerStatus: 'disconnected' });
   expect(disconnected.querySelector('.tcx-tip__hero')).toBeNull();
@@ -146,4 +146,34 @@ it('shows a lasting viewer drop and its unrecovered status in the popover', asyn
   expect(tooltip.textContent).toMatch(/−8\s383 \(−18,8%\)/);
   expect(tooltip.textContent).toMatch(/44\s493 → 36\s110/);
   expect(tooltip.textContent).toContain('За 5 мин не восстановился');
+});
+
+it('shows low engagement alongside comparable past broadcasts after the current counts', async () => {
+  const { buildViewerModel } = await import('../../src/analysis/viewer-estimate.js');
+  const { buildViewerTooltip } = await import('../../src/ui/shared/tooltip-controller.js');
+  const input = { official: 10000, stats: { chatAccess: 'open', sessionMs: 600000,
+    activeUsers: 80, cleanUsers: 80, windowMessages: 150 } };
+  const render = (baseline) => {
+    const model = buildViewerModel({ ...input, baseline });
+    return buildViewerTooltip({ ...model, viewerStatus: 'lowEr' }).textContent;
+  };
+  const text = render({ er: 0.8, sessions: 5, low: 0.7, high: 1 });
+  expect(text).toContain('Обычная для канала');
+  expect(text).toContain('Низкая вовлечённость');
+  expect(text.indexOf('80 из 80')).toBeLessThan(text.indexOf('Обычно на канале'));
+  expect(render({ er: 1, lastEr: 1, sessions: 4 })).toContain('Прошлый эфир');
+});
+
+it('shows the ready follower-only estimate inline and keeps room details in the popover', async () => {
+  const { buildViewerModel } = await import('../../src/analysis/viewer-estimate.js');
+  const { buildViewerTooltip } = await import('../../src/ui/shared/tooltip-controller.js');
+  const model = buildViewerModel({ official: 10000, stats: {
+    chatAccess: 'followers', roomMode: { followers: 30, slow: 5 },
+    sessionMs: 600000, activeUsers: 80, cleanUsers: 80, windowMessages: 300,
+  } });
+  expect(model.loading.ready).toBe(true);
+  expect(model.range).toMatchObject({ low: 640, high: 1000 });
+  expect(model.engagement).toMatchObject({ percent: 0.8, measurable: true, alert: false, belowOrganicBand: false });
+  expect(buildCounterParts(model).text).toBe(buildCounterParts({ range: model.range, official: model.official }).text);
+  expect(buildViewerTooltip(model).textContent).toContain('Только для фолловеров · Замедление');
 });

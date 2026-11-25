@@ -13,17 +13,10 @@
 export const VIEWER_HISTORY_DEFAULTS = Object.freeze({
   maxGapMs: 60000,
   surgeWindowMs: 120000,
-  surgeMinAbs: 3000,
-  surgeMinRatio: 0.15,
   retainMs: 15 * 60 * 1000,
   medianWindowMs: 10 * 60 * 1000,
   maxSamples: 400,
   minSampleIntervalMs: 3000,
-  // A drop must meet both the relative and absolute thresholds.
-  dropMinRatio: 0.04,
-  dropMinAbs: 300,
-  // The peak a drop is measured from must be recent (bots churn fast).
-  dropWindowMs: 3 * 60 * 1000,
   // A recovery within 2% of the pre-drop peak confirms a refill event.
   recoveryRatio: 0.02,
   recoveryWindowMs: 5 * 60 * 1000,
@@ -48,6 +41,10 @@ export function erPercent(cleanUsers, viewers) {
     return null;
   }
   return Math.round((cleanUsers / viewers) * 10000) / 100;
+}
+
+function movementThreshold(a, b) {
+  return Math.max(500, Math.min(3000, 0.3 * Math.min(a, b)));
 }
 
 export function median(values) {
@@ -75,6 +72,8 @@ export class ViewerHistory {
     this.surgeSum = 0;
     this.lastSurgeAt = -Infinity;
     this.lastSurge = null;
+    this.anchors = [];
+    this.pendingRise = null;
     this.lastAnomaly = null;
     this.lastChurn = null;
     this.churnEvents = [];
@@ -99,8 +98,14 @@ export class ViewerHistory {
     const churns = collected('churn');
     this.totalSurges = surges.length;
     this.surgeSum = surges.reduce((sum, event) => sum + event.delta, 0);
-    this.lastSurge = surges.at(-1) ?? null;
-    this.lastSurgeAt = this.lastSurge?.ts ?? this.lastSurgeAt;
+    // Preserve the live event object shared with the session capture as its peak grows.
+    const savedSurge = surges.at(-1);
+    if (savedSurge && this.lastSurge?.ts === savedSurge.ts) {
+      if (savedSurge.to > this.lastSurge.to) Object.assign(this.lastSurge, savedSurge);
+    } else {
+      this.lastSurge = savedSurge ?? null;
+      this.lastSurgeAt = -Infinity;
+    }
 
     this.totalOutflows = drops.length;
     const drop = drops.at(-1);
@@ -166,13 +171,19 @@ export class ViewerHistory {
     this.samples.push(sample);
 
     this._trim(time);
-    const recovering = this.dropState &&
+    const short = this.samples.filter(point => point.ts >= this.dropBaselineAt && time - point.ts <= 20000);
+    this.anchors = this.anchors.filter(point => time - point.ts <= this.options.surgeWindowMs);
+    if (short.length >= 3 && time - short[0].ts >= 15000) {
+      this.anchors.push({ ts: time, value: median(short.map(point => point.value)), clean: cleanUsers });
+    }
+    const recovering = this.dropState?.event &&
       time - this.dropState.at <= this.options.recoveryWindowMs;
     const outflow = this._detectChurn(value, time, cleanUsers);
     if (recovering && !this.dropState) {
-      this.lastSurgeAt = time;
+      this.lastSurgeAt = -Infinity;
     }
-    if (!recovering) {
+    if (recovering || this.dropState) this.pendingRise = null;
+    if (!recovering && !this.dropState) {
       this._detectSurge(sample, meta?.countMessages);
     }
     return { sample, outflow, anomaly: this.lastAnomaly?.ts === time ? this.lastAnomaly : null };
@@ -273,7 +284,7 @@ export class ViewerHistory {
   }
 
   _detectChurn(value, now, cleanUsers) {
-    const { dropWindowMs, dropMinRatio, dropMinAbs } = this.options;
+    const dropWindowMs = this.options.surgeWindowMs;
 
     if (this.dropState && now - this.dropState.at > this.options.recoveryWindowMs) {
       this._closeDrop('unrecovered', this.dropState.at + this.options.recoveryWindowMs);
@@ -282,19 +293,19 @@ export class ViewerHistory {
     let peakTs = null;
     let peakClean = null;
     const cutoff = Math.max(now - dropWindowMs, this.dropBaselineAt);
-    for (let i = this.samples.length - 1; i >= 0; i -= 1) {
-      const sample = this.samples[i];
+    for (let i = this.anchors.length - 1; i >= 0; i -= 1) {
+      const sample = this.anchors[i];
       if (sample.ts < cutoff) {
         break;
       }
-      if (sample.value > peakValue) {
+      if (sample.ts < now && sample.value > peakValue) {
         peakValue = sample.value;
         peakTs = sample.ts;
         peakClean = sample.clean;
       }
     }
 
-    const threshold = Math.max(dropMinAbs, peakValue * dropMinRatio);
+    const threshold = movementThreshold(peakValue, value);
 
     if (!this.dropState) {
       if (
@@ -322,11 +333,16 @@ export class ViewerHistory {
       state.lowClean = cleanUsers;
     }
 
-    const stillBelow = state.from - value >= Math.max(dropMinAbs, state.from * dropMinRatio);
+    const stillBelow = state.from - value >= movementThreshold(state.from, value);
     let outflow;
+    if (!state.event && !stillBelow) {
+      this.dropState = null;
+      return;
+    }
     if (!state.event && stillBelow && now - state.at >= this.options.dropConfirmMs) {
       outflow = state.event = {
         kind: 'viewer-outflow', ts: state.at, from: state.from,
+        startedAt: state.at, raid: this.raids.filter(raid => raid.ts <= now && now - raid.ts <= 180000).at(-1) ?? null,
         fromTs: state.fromTs, confirmedAt: now, status: 'observing',
       };
       this.lastOutflow = outflow;
@@ -364,6 +380,8 @@ export class ViewerHistory {
       this.totalChurnEvents += 1;
       this.totalDropSum += event.drop;
       this.totalMaxDrop = Math.max(this.totalMaxDrop, event.drop);
+      this.pendingRise = null;
+      this.anchors = [];
       this._closeDrop('recovered', now);
     }
     return outflow;
@@ -382,6 +400,9 @@ export class ViewerHistory {
 
   interrupt(now = this.samples.at(-1)?.ts ?? Date.now()) {
     this.samples = [];
+    this.anchors = [];
+    this.pendingRise = null;
+    this.lastSurgeAt = -Infinity;
     this._closeDrop('interrupted', now);
   }
 
@@ -395,21 +416,28 @@ export class ViewerHistory {
   }
 
   _detectSurge(sample, countMessages) {
-    const { surgeWindowMs, surgeMinAbs, surgeMinRatio } = this.options;
-    if (sample.ts - this.lastSurgeAt <= surgeWindowMs) {
-      return;
-    }
-    const cutoff = Math.max(sample.ts - surgeWindowMs, this.lastSurgeAt);
-    let from = sample;
-    for (const previous of this.samples) {
-      if (previous.ts >= cutoff && previous.value <= from.value && previous.ts < sample.ts) {
-        from = previous;
+    const { surgeWindowMs } = this.options;
+    if (sample.ts - this.lastSurgeAt <= surgeWindowMs && this.lastSurge) {
+      if (sample.value > this.lastSurge.to) {
+        this.lastSurgeAt = sample.ts;
+        this.surgeSum += sample.value - this.lastSurge.to;
+        Object.assign(this.lastSurge, { to: sample.value, delta: sample.value - this.lastSurge.from, peakTs: sample.ts });
       }
-    }
-    const delta = sample.value - from.value;
-    if (from.value <= 0 || delta < Math.max(surgeMinAbs, from.value * surgeMinRatio)) {
       return;
     }
+    if (this.pendingRise && sample.value - this.pendingRise.from.value <
+        movementThreshold(this.pendingRise.from.value, sample.value)) this.pendingRise = null;
+    if (!this.pendingRise) {
+      const from = this.anchors.reduce((low, point) => point.ts < sample.ts && point.value <= low.value ? point : low, sample);
+      if (sample.value - from.value < movementThreshold(from.value, sample.value)) return;
+      this.pendingRise = { from, at: sample.ts, peak: sample };
+      return;
+    }
+    if (sample.value > this.pendingRise.peak.value) this.pendingRise.peak = sample;
+    const { from, at, peak: highest } = this.pendingRise;
+    if (sample.ts - at < this.options.dropConfirmMs) return;
+    this.pendingRise = null;
+    const delta = highest.value - from.value;
     const durationMs = sample.ts - from.ts;
     const before = countMessages?.(from.ts - surgeWindowMs, from.ts);
     const during = countMessages?.(from.ts, sample.ts);
@@ -422,14 +450,14 @@ export class ViewerHistory {
       previous.ts < from.ts && previous.ts >= from.ts - this.options.recoveryWindowMs &&
       (!highest || previous.value > highest.value) ? previous : highest, null);
     const precedingDrop = peak && peak.value - from.value >=
-      Math.max(this.options.dropMinAbs, peak.value * this.options.dropMinRatio)
+      movementThreshold(peak.value, from.value)
       ? { from: peak.value, to: from.value, fromTs: peak.ts, ts: from.ts }
       : null;
     this.lastSurgeAt = sample.ts;
     this.totalSurges += 1;
     this.surgeSum += delta;
     this.lastAnomaly = this.lastSurge = {
-      kind: 'surge', ts: sample.ts, from: from.value, to: sample.value,
+      kind: 'surge', ts: sample.ts, startedAt: at, confirmedAt: sample.ts, peakTs: highest.ts, from: from.value, to: highest.value,
       delta, durationMs, fromTs: from.ts, beforeRate, duringRate,
       rateRatio: beforeRate > 0 && duringRate !== null ? duringRate / beforeRate : null,
       raid, precedingDrop,

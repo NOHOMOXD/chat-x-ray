@@ -14,7 +14,7 @@
  * what this module extrapolates into a *range*.
  *
  * The estimate is a heuristic, not a measurement. It is deliberately shown as
- * a range with a confidence label, and the UI says so.
+ * a range alongside the duration of the observation.
  */
 export const VIEWER_ESTIMATE_DEFAULTS = Object.freeze({
   referenceWindowMs: 10 * 60 * 1000,
@@ -152,6 +152,10 @@ export function getChatEngagement(officialViewers, stats, options) {
   const percent = ratio * 100;
   const measurable = sessionMs >= settings.erAlertMinSessionMs;
 
+  const evaluateLowEngagement = measurable && !stats.mixedMode && stats.chatAccess === 'open' &&
+    !stats.roomMode?.slow && !stats.roomMode?.emotes && !stats.roomMode?.unique &&
+    officialViewers >= settings.erAlertMinViewers;
+
   return {
     percent,
     ratio,
@@ -160,12 +164,10 @@ export function getChatEngagement(officialViewers, stats, options) {
     thresholdPercent: settings.erAlertPercent,
     measurable,
     alert:
-      measurable &&
-      officialViewers >= settings.erAlertMinViewers &&
+      evaluateLowEngagement &&
       percent < settings.erAlertPercent,
     belowOrganicBand:
-      measurable &&
-      officialViewers >= settings.erAlertMinViewers &&
+      evaluateLowEngagement &&
       percent < settings.erSoftPercent,
   };
 }
@@ -405,6 +407,8 @@ export function buildViewerModel(input) {
     cleanUsers: Math.max(0, Number(stats.cleanUsers) || 0),
     suspiciousUsers: Math.max(0, Number(stats.suspiciousUsers) || 0),
     suspiciousPercent: Math.max(0, Number(stats.suspiciousPercent) || 0),
+    chatAccess: stats.chatAccess ?? 'unknown',
+    roomMode: stats.roomMode, windowModes: stats.windowModes, mixedMode: stats.mixedMode,
     loading: getLoadingProgress(stats, settings),
     freshUsers: Math.max(0, Number(stats.freshUsers) || 0),
     messagesPerMinute: Math.max(0, Number(stats.messagesPerMinute) || 0),
@@ -412,7 +416,7 @@ export function buildViewerModel(input) {
     sessionMs: Math.max(0, Number(stats.sessionMs) || 0),
     isBotWave: Boolean(stats.isBotWave),
     erBaseline:
-      baseline && Number.isFinite(baseline.er)
+      engagement?.measurable && !stats.mixedMode && stats.chatAccess !== 'unknown' && baseline && Number.isFinite(baseline.er)
         ? {
             ...baseline,
             er: baseline.er,
