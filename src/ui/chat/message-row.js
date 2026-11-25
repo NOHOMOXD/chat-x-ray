@@ -94,7 +94,7 @@ export class MessageRow {
     this.row.dataset.tcxWave = isWaveRecord(this.record) ? '1' : '0';
 
     const idGroup = settings.getIdGroup?.(this.record.numericUserId);
-    if (settings.showBadges && (this.record.botScore >= threshold || idGroup)) {
+    if (settings.showBadges && (this.record.botConfirmation || this.record.botScore >= threshold || idGroup)) {
       this._ensureBadge(threshold, idGroup);
     } else {
       this._removeBadge();
@@ -144,14 +144,14 @@ export class MessageRow {
       }
     }
 
-    const score = this.record.botScore;
+    const score = this.record.botConfirmation?.score ?? this.record.botScore;
     const minThreshold = Number.isFinite(threshold) ? threshold : 50;
     const hue = botHue(score, minThreshold);
     const wave = isWaveRecord(this.record);
     const neutral = !isSuspicious(this.record, threshold);
-    const groupOnly = score < threshold;
+    const groupOnly = neutral && score < threshold;
 
-    setTextIfChanged(badge, groupOnly ? 'ID' : neutral ? String(score) : t('tip.badge.points', { score }));
+    setTextIfChanged(badge, groupOnly ? 'ID' : neutral ? score + '?' : t('tip.badge.points', { score }));
     badge.classList.toggle('tcx-bot-badge--id-group', neutral);
     badge.dataset.tcxScore = String(score);
     badge.style.setProperty('--tcx-bot-hue', String(hue));
@@ -174,16 +174,16 @@ export class MessageRow {
       badge.dataset.tcxTipAttached = '1';
       tooltipController.attach(badge, () =>
         buildBadgeTooltip({
-          score: this.record.botScore,
+          score: this.record.botConfirmation?.score ?? this.record.botScore,
           threshold: this.settings.suspiciousThreshold,
-          triggers: this.record.triggers || [],
+          triggers: this.record.botConfirmation?.triggers ?? this.record.triggers ?? [],
           isR9KDuplicate: this.record.isR9KDuplicate,
           spamFlood: this.record.spamFlood,
           accountAgeDays: this.record.accountAgeDays,
           idGroup: this.settings.getIdGroup?.(this.record.numericUserId),
           groupHistory: this.settings.getGroupHistory?.(this.record.numericUserId),
           observedBroadcasts: this.settings.observedBroadcasts,
-          groupOnly: this.record.botScore < this.settings.suspiciousThreshold,
+          groupOnly: !this.record.botConfirmation && this.record.botScore < this.settings.suspiciousThreshold,
           neutral: !isSuspicious(this.record, this.settings.suspiciousThreshold),
           r9kSimilarity: this.record.r9kSimilarity,
           roleExempt: this.record.roleExempt,

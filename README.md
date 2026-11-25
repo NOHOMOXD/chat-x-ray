@@ -15,7 +15,7 @@ Chat X-Ray flags suspicious accounts in Twitch chat and estimates the audience f
   15 minutes are muted or hidden if you want.
 - **Viewer estimate.** An estimated audience size appears next to Twitch’s official count.
 
-- **Loading progress.** `(Loading… 66%)` until enough chat has been seen.
+- **Chat activity.** The first message shows the unique chatter count. The viewer range appears when enough activity has been observed.
 - **Red warnings.** A wave of suspicious accounts, low chat-to-viewer ratio or
   a spike and collapse in viewers turns the counter and chat bar red.
 - **Session export.** Optional JSON of everything seen this session.

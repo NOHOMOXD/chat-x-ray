@@ -17,8 +17,9 @@ import {
   hasNumericSuffixPattern,
   clamp,
 } from './text-analysis.js';
+import { waveEvidence } from './wave-evidence.js';
 import { BotWaveTracker } from './bot-wave-tracker.js';
-import { ChatSession, isSuspicious } from './chat-session.js';
+import { BEHAVIOR_TRIGGERS, ChatSession, isSuspicious } from './chat-session.js';
 import { BotLogger } from '../config/bot-logger.js';
 import { IdClusterIndex } from './id-cluster-index.js';
 
@@ -161,6 +162,7 @@ export class Analyzer {
       ttlMs: this.options.recentWindowMs,
     });
 
+    this.clearBotMemory();
     this.waveCount = 0;
     this.lastWave = null;
     this.idGroupSnapshot = null;
@@ -185,6 +187,7 @@ export class Analyzer {
     this.session.reset();
     this.cluster.reset();
     this.waves.reset();
+    this.clearBotMemory();
     this.waveCount = 0;
     this.lastWave = null;
     this.idGroupSnapshot = null;
@@ -196,7 +199,62 @@ export class Analyzer {
     return this.waves.isBotWave;
   }
 
+  clearBotMemory() {
+    this.confirmed = {};
+    this.bonuses = {};
+    this.confirmationDirty = false;
+    this.previousReasons = new Map();
+    this.pastWaves = new Map();
+  }
+
+  restoreBotMemory(checkpoint, history) {
+    Object.assign(this.confirmed, checkpoint.confirmed);
+    for (const [id, bonuses] of Object.entries(checkpoint.bonuses ?? {})) {
+      this.bonuses[id] = { ...bonuses, ...this.bonuses[id] };
+    }
+    this.previousReasons.clear();
+    for (const prior of history ?? []) {
+      for (const [id, confirmation] of Object.entries(prior.confirmed ?? {})) {
+        const reasons = this.previousReasons.get(Number(id)) ?? new Set();
+        for (const trigger of confirmation.triggers) {
+          if (BEHAVIOR_TRIGGERS.has(trigger.key)) reasons.add(trigger.key);
+        }
+        this.previousReasons.set(Number(id), reasons);
+      }
+    }
+  }
+
+  updateConfirmation(record) {
+    if (record.roleExempt || record.serviceBot || !record.numericUserId) return;
+    const id = record.numericUserId;
+    const previous = this.previousReasons.get(id);
+    if (!this.confirmed[id] && previous && record.triggers.some(tr => previous.has(tr.key)) &&
+        !this.bonuses[id]?.returning && !record.triggers.some(tr => tr.key === 'returning')) {
+      record.triggers.push({ key: 'returning', labelKey: 'trigger.returning', points: 10 });
+      record.botScore = Math.min(100, record.botScore + 10);
+    }
+    const earned = this.bonuses[id] ?? {};
+    for (const key of ['wave-phrase', 'wave-order', 'group-recurrence', 'returning']) {
+      const trigger = record.triggers.find(tr => tr.key === key);
+      if (trigger && !earned[key]) {
+        earned[key] = { ts: record.ts, trigger };
+        this.bonuses[id] = earned;
+        this.confirmationDirty = true;
+      } else if (!trigger && earned[key]?.ts <= record.ts) {
+        record.triggers.push(earned[key].trigger);
+        record.botScore = Math.min(100, record.botScore + earned[key].trigger.points);
+      }
+    }
+    if (!this.confirmed[id] && isSuspicious(record, this.options.suspiciousThreshold)) {
+      this.confirmationDirty = true;
+      this.confirmed[id] = { ts: record.ts, score: record.botScore, triggers: structuredClone(record.triggers) };
+    }
+    const confirmation = this.confirmed[id];
+    if (confirmation && record.ts >= confirmation.ts) record.botConfirmation = confirmation;
+  }
+
   auditRecord(record) {
+    this.updateConfirmation(record);
     if (!this.options.enableAuditLog) return;
     const suspicious = isSuspicious(record, this.options.suspiciousThreshold);
     if (suspicious || record.isR9KDuplicate || record.spamFlood) {
@@ -700,6 +758,17 @@ export class Analyzer {
         }
       }
       bucket.event.authors = bucket.authors.size;
+      const prior = [...this.pastWaves].filter(([start]) => start < record.bucketStart).map(([, wave]) => wave);
+      const evidence = waveEvidence(bucket.records, prior, this.session.records);
+      this.pastWaves.set(record.bucketStart, evidence.wave);
+      for (const entry of bucket.records) {
+        for (const [key, ids] of [['wave-order', evidence.ordered], ['wave-phrase', evidence.repeated]]) {
+          if (!entry.waveBoost || !ids.has(entry.numericUserId) || entry.triggers.some(t => t.key === key)) continue;
+          entry.triggers.push({ key, labelKey: 'trigger.' + key, points: 10 });
+          entry.botScore = Math.min(100, entry.botScore + 10);
+          this.auditRecord(entry);
+        }
+      }
     }
 
     if (waveInfo.waveTriggered) {

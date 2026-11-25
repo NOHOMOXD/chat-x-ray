@@ -51,7 +51,7 @@ it('stores hashed phrases, counts identical broadcast IDs once and tracks precis
     applyGroupHistoryBonus(message, recurrence);
     applyGroupHistoryBonus(message, recurrence);
   }
-  expect(messages.map(({ botScore }) => botScore)).toEqual([100, 25, 25, 25, 25, 25]);
+  expect(messages.map(({ botScore }) => botScore)).toEqual([100, 35, 25, 25, 25, 25]);
   expect(messages[0].triggers).toHaveLength(2);
 });
 

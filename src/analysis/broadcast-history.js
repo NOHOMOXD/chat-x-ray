@@ -3,7 +3,7 @@ import { medianNumber } from './er-baseline.js';
 
 export const BROADCAST_HISTORY_KEY = 'tcx:broadcastHistory:v1';
 export const HISTORY_CLEAR_KEY = 'tcx:broadcastHistory:clearedAt';
-export const SCORING_RULE_VERSION = 3;
+export const SCORING_RULE_VERSION = 4;
 const MAX_BROADCASTS_PER_CHANNEL = 20;
 const MAX_STORE_BYTES = 4 * 1024 * 1024;
 const MINUTE = 60000;
@@ -100,6 +100,9 @@ function groupCoverage(snapshot) {
 
 export function checkpointMerge(current = {}, update = {}) {
   return {
+    bonuses: Object.fromEntries([...new Set([...Object.keys(current.bonuses ?? {}), ...Object.keys(update.bonuses ?? {})])].map(id =>
+      [id, { ...update.bonuses?.[id], ...current.bonuses?.[id] }])),
+    confirmed: { ...update.confirmed, ...current.confirmed },
     intervals: {
       chat: mergeIntervals([...(current.intervals?.chat ?? []), ...(update.intervals?.chat ?? [])]),
       viewer: mergeIntervals([...(current.intervals?.viewer ?? []), ...(update.intervals?.viewer ?? [])]),
@@ -107,6 +110,9 @@ export function checkpointMerge(current = {}, update = {}) {
     events: coalesceEvents(current.events ?? [], update.events ?? []),
     groups: minuteRecords(current.groups ?? [], update.groups ?? [],
       (a, b) => groupCoverage(a) >= groupCoverage(b) ? a : b).slice(-MAX_GROUP_WINDOWS),
+    lastRangeModel: [current.lastRangeModel, current.lastViewerModel, update.lastRangeModel, update.lastViewerModel]
+      .filter(model => model?.range && !model.stale && model.recentAge == null)
+      .sort((a, b) => b.sampledAt - a.sampledAt)[0] ?? null,
     lastViewerModel: lastModel(current.lastViewerModel, update.lastViewerModel),
   };
 }
@@ -167,7 +173,7 @@ function historySnapshot(records, identity, settings) {
       .sort((a, b) => startedAt(b) - startedAt(a))
       .slice(0, MAX_BROADCASTS_PER_CHANNEL).map(({ channel, id, startedAt, checkpoint }) => ({
       channel, id: id || broadcastKey({ channel, startedAt }), startedAt,
-      groupObservations: checkpoint.groups,
+      confirmed: checkpoint.confirmed, groupObservations: checkpoint.groups,
     })),
   };
 }
@@ -202,6 +208,9 @@ function afterClear(update, clearedAt) {
     // ER and group observations each describe a full rolling window.
     samples: (update.samples ?? []).filter((item) => item.ts - 600000 >= clearedAt),
     groups: (update.groups ?? []).filter((item) => item.ts - 600000 >= clearedAt),
+    bonuses: Object.fromEntries(Object.entries(update.bonuses ?? {}).map(([id, reasons]) =>
+      [id, Object.fromEntries(Object.entries(reasons).filter(([, entry]) => entry.ts > clearedAt))])),
+    confirmed: Object.fromEntries(Object.entries(update.confirmed ?? {}).filter(([, value]) => value.ts > clearedAt)),
     events: newer(update.events),
     lastViewerModel: update.lastViewerModel?.sampledAt - 600000 >= clearedAt ? update.lastViewerModel : null,
   };

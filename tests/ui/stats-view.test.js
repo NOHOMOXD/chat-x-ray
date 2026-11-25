@@ -112,7 +112,7 @@ describe('values', () => {
 });
 
 describe('loading badge', () => {
-  it('shows the percentage while the sample is short', () => {
+  it('omits the loading badge while the sample is short', () => {
     const container = mountChat();
     const { view } = makeView(
       baseStats({ sessionMs: 30000, cleanUsers: 2, windowMessages: 3 })
@@ -120,18 +120,14 @@ describe('loading badge', () => {
     view.ensure(container);
 
     const badge = document.querySelector('.tcx-stats__loading');
-    expect(badge.hidden).toBe(false);
-    // Word first, percentage last: the dots hang off the word.
-    expect(badge.children[0].className).toBe('tcx-stats__loading-word');
-    expect(badge.children[1].tagName).toBe('B');
-    expect(badge.children[1].textContent).toMatch(/^\d{1,3}%$/);
+    expect(badge).toBeNull();
   });
 
   it('hides the badge once the estimate is ready', () => {
     const container = mountChat();
     const { view } = makeView(baseStats());
     view.ensure(container);
-    expect(document.querySelector('.tcx-stats__loading').hidden).toBe(true);
+    expect(document.querySelector('.tcx-stats__loading')).toBeNull();
   });
 });
 

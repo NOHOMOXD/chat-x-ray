@@ -163,3 +163,34 @@ it('isolates room settings and old scoring versions without deleting observation
   expect((await store.load(identity(3), { ...normal, roomProfile: '0/-1/5/0/0' })).baseline).toBeNull();
   expect((await store.read()).find(item => item.id === old.id).profiles).toEqual(old.profiles);
 });
+
+it('restores a confirmed author and only grants a returning bonus for fresh matching behavior', async () => {
+  const { Analyzer } = await import('../../src/core/analyzer.js');
+  const options = sharedPersistence();
+  const store = new BroadcastHistory(options);
+  const record = key => ({
+    numericUserId: 123, ts: Date.now(), botScore: 25,
+    triggers: key ? [{ key, points: 5 }] : [],
+  });
+  const confirmation = { ts: Date.now() - 600000, score: 40, triggers: [{ key: 'mechanical-rhythm', points: 5 }] };
+  await store.save(identity(1), settings, { confirmed: { 123: confirmation } });
+  const analyzer = new Analyzer();
+  const restored = await new BroadcastHistory(options).load(identity(1), settings);
+  analyzer.restoreBotMemory(restored.checkpoint, restored.history);
+  const ordinary = record();
+  analyzer.updateConfirmation(ordinary);
+  expect(ordinary.botConfirmation).toEqual(confirmation);
+  analyzer.reset();
+  const next = await store.save(identity(2), settings, {});
+  analyzer.restoreBotMemory(next.checkpoint, next.history);
+  const unrelated = record('self-repeat');
+  analyzer.updateConfirmation(unrelated);
+  expect(unrelated.botConfirmation).toBeUndefined();
+  const repeated = record('mechanical-rhythm');
+  analyzer.updateConfirmation(repeated);
+  analyzer.updateConfirmation(repeated);
+  expect(repeated.botConfirmation.score).toBe(35);
+  expect(repeated.triggers.filter(t => t.key === 'returning')).toHaveLength(1);
+  await store.clear();
+  expect((await store.load(identity(2), settings)).history).toEqual([]);
+});

@@ -3,7 +3,7 @@
  * Deduplication of IRC message IDs, per-user history for rhythm/self-repeat
  * and active chatter statistics.
  */
-const BEHAVIOR_TRIGGERS = new Set(['self-repeat', 'mechanical-rhythm', 'solicitation']);
+export const BEHAVIOR_TRIGGERS = new Set(['self-repeat', 'mechanical-rhythm', 'solicitation', 'group-recurrence', 'wave-order', 'wave-phrase']);
 
 export function hasSuspiciousBehavior(record) {
   return !record.roleExempt && !record.serviceBot &&
@@ -11,7 +11,7 @@ export function hasSuspiciousBehavior(record) {
 }
 
 export function isSuspicious(record, threshold) {
-  return record.botScore >= threshold && hasSuspiciousBehavior(record);
+  return !!record.botConfirmation || (record.botScore >= threshold && hasSuspiciousBehavior(record));
 }
 
 export const DEFAULTS = Object.freeze({
@@ -174,7 +174,7 @@ export class ChatSession {
       if (record.freshAccount) {
         freshUsers.add(record.userKey);
       }
-      if (record.botScore >= threshold) scoredUsers.add(record.userKey);
+      if (record.botConfirmation || record.botScore >= threshold) scoredUsers.add(record.userKey);
       if (isSuspicious(record, threshold)) {
         suspiciousMessages += 1;
         suspiciousUsers.add(record.userKey);

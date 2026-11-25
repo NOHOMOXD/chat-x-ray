@@ -3,12 +3,8 @@
  * Mounts between Twitch's .stream-chat-header and .chat-room.
  * Uses selective text updates to prevent MutationObserver feedback loops.
  *
- * The strip can be hidden from settings ("Show the stats strip above chat");
- * while the viewer estimate is still gathering its sample the strip shows
- * "Загружаю… 66%" / "Loading… 66%" so the percentage is visible without the
- * tooltip, and any bot wave turns the strip red.
  */
-import { isAlertState, setAttributeIfChanged, setTextIfChanged } from '../shared/ui-utils.js';
+import { isAlertState, setTextIfChanged } from '../shared/ui-utils.js';
 import {
   buildStatsTooltip,
   tooltipController,
@@ -146,43 +142,12 @@ export class StatsView {
     });
     refs.suspicious.classList.toggle('tcx-stats__value--alert', suspiciousAlert);
 
-    if (loading.ready) {
-      setTextIfChanged(refs.loadingValue, '100%');
-      refs.loading.hidden = true;
-    } else {
-      setTextIfChanged(refs.loadingValue, loading.percent + '%');
-      refs.loading.hidden = false;
-    }
-    setAttributeIfChanged(
-      refs.loading,
-      'aria-label',
-      loading.ready
-        ? t('stats.loadingDone', {
-            done: loading.done,
-            required: loading.required,
-          })
-        : t('stats.loadingTip', { percent: loading.percent })
-    );
-    if (loading.ready) {
-      if (refs.loading.hasAttribute('title')) {
-        refs.loading.removeAttribute('title');
-      }
-    } else {
-      setAttributeIfChanged(
-        refs.loading,
-        'title',
-        t('stats.loadingTitle', { percent: loading.percent })
-      );
-    }
-
     // Anything that should scream — a bot wave, a warning/critical viewer
     // verdict, or a suspicious share past the user's own threshold — paints
     // the whole strip red, so "red" means the same thing everywhere.
     this.alertState = this.alertState || suspiciousAlert;
     refs.root.classList.toggle('tcx-stats--alert', this.alertState);
-    refs.root.classList.toggle('tcx-stats--loading', !loading.ready);
     refs.root.dataset.wave = waveAlert ? '1' : '0';
-    refs.root.dataset.loading = String(loading.percent);
     refs.wave.hidden = !waveAlert;
     this.chatStatus = stats.chatConnected === false ? 'disconnected'
       : waveAlert ? 'wave'
@@ -234,19 +199,6 @@ export class StatsView {
     const suspicious = this._createMetric('🤖', t('stats.suspicious'));
     suspicious.value.textContent = '0%';
 
-    // "Загружаю… 66%": the dots hang off the word (a fixed-width ::after box),
-    // and the percentage is last so its digits never jump around.
-    const loading = document.createElement('span');
-    loading.className = 'tcx-stats__loading';
-    loading.dataset.tcxUi = 'loading';
-    const loadingWord = document.createElement('span');
-    loadingWord.className = 'tcx-stats__loading-word';
-    loadingWord.textContent = t('counter.loading');
-    const loadingValue = document.createElement('b');
-    loadingValue.textContent = '0%';
-    loading.appendChild(loadingWord);
-    loading.appendChild(loadingValue);
-
     const wave = document.createElement('span');
     wave.className = 'tcx-stats__wave';
     wave.textContent = '🌊 ' + t('stats.wave');
@@ -262,7 +214,6 @@ export class StatsView {
       }
       rootEl.appendChild(metrics[i]);
     }
-    rootEl.appendChild(loading);
     rootEl.appendChild(wave);
 
     this.refs = {
@@ -273,8 +224,6 @@ export class StatsView {
       activeLabel: active.label,
       suspicious: suspicious.value,
       suspiciousLabel: suspicious.label,
-      loading,
-      loadingValue,
       wave,
     };
 

@@ -152,8 +152,8 @@ export function getChatEngagement(officialViewers, stats, options) {
   const percent = ratio * 100;
   const measurable = sessionMs >= settings.erAlertMinSessionMs;
 
-  const evaluateLowEngagement = measurable && !stats.mixedMode && stats.chatAccess === 'open' &&
-    !stats.roomMode?.slow && !stats.roomMode?.emotes && !stats.roomMode?.unique &&
+  const evaluateLowEngagement = measurable && !stats.mixedMode && ['open', 'followers'].includes(stats.chatAccess) &&
+    !stats.roomMode?.slow && !stats.roomMode?.emotes &&
     officialViewers >= settings.erAlertMinViewers;
 
   return {
@@ -307,6 +307,9 @@ export function classifyViewerSignals(input) {
       labelKey: 'verdict.chat-bots',
     };
   }
+  if (churn?.totalOutflows || churn?.totalSurges || stats?.waveCount) {
+    return { level: 'info', key: 'session-events', labelKey: 'verdict.session-events' };
+  }
   if (!range || engagement?.measurable === false) {
     return {
       level: 'unknown',
@@ -403,11 +406,14 @@ export function buildViewerModel(input) {
     engagement,
     churn,
     verdict,
+    observedChatters: Math.max(0, (stats.activeUsers || 0) - (stats.serviceBots || 0)),
+    audienceMessages: stats.audienceMessages ?? stats.windowMessages,
     activeUsers: Math.max(0, Number(stats.activeUsers) || 0),
     cleanUsers: Math.max(0, Number(stats.cleanUsers) || 0),
     suspiciousUsers: Math.max(0, Number(stats.suspiciousUsers) || 0),
     suspiciousPercent: Math.max(0, Number(stats.suspiciousPercent) || 0),
     chatAccess: stats.chatAccess ?? 'unknown',
+    waveCount: stats.waveCount, lastWave: stats.lastWave, waveAlert: stats.waveAlert,
     roomMode: stats.roomMode, windowModes: stats.windowModes, mixedMode: stats.mixedMode,
     loading: getLoadingProgress(stats, settings),
     freshUsers: Math.max(0, Number(stats.freshUsers) || 0),

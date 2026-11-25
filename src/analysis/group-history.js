@@ -1,4 +1,3 @@
-import { hasSuspiciousBehavior } from '../core/chat-session.js';
 const MAX_BROADCASTS = 20;
 const COORDINATION_BONUS = 10;
 const MIN_SHARED_SPEAKERS = 2;
@@ -10,7 +9,7 @@ async function fingerprint(text) {
     .map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function isSubstantive(text) {
+export function isSubstantive(text) {
   return Array.from(text).length >= 12 && (text.match(/\p{L}+/gu)?.length ?? 0) >= 3;
 }
 
@@ -30,7 +29,7 @@ export async function buildGroupObservation(snapshot, { ts = Date.now() } = {}) 
   return { ts, groups };
 }
 
-function isRare(phrase, group) {
+export function isRare(phrase, group) {
   return phrase.substantive && phrase.memberIds.length >= MIN_SHARED_SPEAKERS &&
     Number.isFinite(group.outsideAuthorCount) && group.outsideAuthorCount >= 20 &&
     phrase.outsideAuthors <= 2 && phrase.outsideAuthors / group.outsideAuthorCount <= 0.05;
@@ -70,7 +69,7 @@ export function analyzeGroupRecurrence(observation, previousBroadcasts) {
     let coordinatedBroadcasts = 0;
     const memberIds = new Set(group.memberIds);
     group.memberIds.forEach((id) => {
-      authors[id] = { groupBroadcasts: 0, coordinatedBroadcasts: 0 };
+      authors[id] ??= { groupBroadcasts: 0, coordinatedBroadcasts: 0 };
     });
 
     for (const observations of broadcasts.values()) {
@@ -101,7 +100,7 @@ export function analyzeGroupRecurrence(observation, previousBroadcasts) {
 }
 
 export function applyGroupHistoryBonus(record, recurrence) {
-  if (!record.unbadged || !hasSuspiciousBehavior(record) ||
+  if (!record.unbadged || record.roleExempt || record.serviceBot ||
       !recurrence?.authors[record.numericUserId]?.coordinatedBroadcasts ||
       record.triggers.some((trigger) => trigger.key === 'group-recurrence')) return;
   record.triggers.push({

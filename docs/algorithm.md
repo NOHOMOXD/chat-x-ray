@@ -24,7 +24,7 @@ A neutral numeric badge shows a score at or above the threshold without a behavi
 
 Moderators, VIPs, subscribers, the broadcaster and known service bots always score 0. The repeat filter can still mute or hide messages from users with privileged roles.
 
-Default threshold: **30**, adjustable from 10 to 100. A BOT label also requires self-repetition, mechanical rhythm or a solicitation match. A newcomer with 35 profile points stays in the audience count. A dense ID group gets a neutral ID label. Recurring group phrases earn a bonus when the author has a behavioral signal.
+The default threshold is **30** (10–100). A gray “35?” shows profile points. BOT also requires self-repetition, mechanical rhythm, solicitation, a recurring rare group phrase, or three authors repeating their order in three waves. Confirmation lasts until the end of the broadcast. Matching fresh behavior on a later broadcast earns 10 additional points.
 
 ## Chat filter
 
@@ -42,7 +42,7 @@ The estimate assumes that 8–12.5% of viewers write in chat over ten minutes. I
   clean authors divided by the official count. The 2.5% warning at 1 000+
   viewers and the 6% middle band are heuristics.
 
-All chat modes share one rolling estimate window, including unknown access. The popover shows restrictions and changes within the window. Only ten continuous minutes of open chat qualify for a low-engagement alert. Mixed and unknown windows are excluded from historical comparisons. Chat statistics show the most active author’s share over up to ten continuous minutes, excluding service bots.
+All chat modes share one rolling estimate window, including unknown access. The popover lists active restrictions. Followers-only and unique-chat modes allow low-engagement alerts after ten minutes. Mixed and unknown windows are excluded from historical comparisons. Chat statistics show the most active author’s share over up to ten continuous minutes, excluding service bots.
 
 Chat and viewers are tracked separately: overlapping periods merge, gaps count
 as nothing, and after a break the ten-minute window starts over.

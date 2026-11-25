@@ -339,7 +339,7 @@ it('keeps a first greeting clean through age lookup and applies threshold change
   }
   expect(analyzer.getStats(msg.ts + 2)).toMatchObject({ cleanUsers: 0, suspiciousUsers: 1 });
   analyzer.updateOptions({ suspiciousThreshold: 100 });
-  expect(analyzer.getStats(msg.ts + 2)).toMatchObject({ cleanUsers: 1, suspiciousUsers: 0 });
+  expect(analyzer.getStats(msg.ts + 2)).toMatchObject({ cleanUsers: 0, suspiciousUsers: 1 });
 });
 
 it.each([true, false])('measures concentration before filters and excludes service messages (%s)', concentrated => {
@@ -363,4 +363,15 @@ it('separates messages before and after a mode change within the same IRC frame'
   analyzer.ingest(message({ ts }), ts);
   expect(analyzer.getStats(ts, ts, boundary)).toMatchObject({ cleanUsers: 1, windowMessages: 1 });
   expect(analyzer.getStats(ts, ts)).toMatchObject({ cleanUsers: 2, windowMessages: 2 });
+});
+
+it('carries a confirmation into later ordinary messages only within its broadcast', () => {
+  const analyzer = new Analyzer();
+  const base = message({ userId: '765', text: 'привет', badges: [], color: '' });
+  for (let i = 0; i < 3; i++) analyzer.ingest({ ...base, id: 'r' + i, ts: base.ts + i }, base.ts + i);
+  const ordinary = { ...base, id: 'ordinary', ts: base.ts + 610000, text: 'совсем другой текст', color: '#123abc' };
+  expect(analyzer.ingest(ordinary, ordinary.ts).record.botConfirmation?.score).toBeGreaterThanOrEqual(30);
+  expect(analyzer.getStats(ordinary.ts).suspiciousUsers).toBe(1);
+  analyzer.reset();
+  expect(analyzer.ingest(ordinary, ordinary.ts).record.botConfirmation).toBeUndefined();
 });

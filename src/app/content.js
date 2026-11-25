@@ -229,6 +229,8 @@ export class ChatXRayApp {
       getSettings: () => this.settings,
     });
     this.viewerCounter = new ViewerCounterAdjuster({
+      getBroadcast: () => this.broadcast,
+      getSaved: () => this.broadcastData?.checkpoint?.lastRangeModel,
       getStats: (now) => this.getViewerStats(now),
       getMinute: (now, samples, stats) => this.getMinute(now, samples, stats),
       countMessages: (from, to) => this.countMessages(from, to),
@@ -419,7 +421,6 @@ export class ChatXRayApp {
             this.rooms.delete(channel);
             if (channel === this.channel) {
               this.roomSince = Date.now();
-              this.recordEvent({ kind: 'room-mode', ts: this.roomSince, from: room.mode, to: {} });
             }
           }
           if (!this.openSockets.size) {
@@ -437,8 +438,10 @@ export class ChatXRayApp {
         if (message.channel === this.channel &&
             (previous?.socketId !== message.socketId || modeProfile(previous.mode) !== modeProfile(message.mode))) {
           // A single IRC frame may contain messages on both sides of a change.
-          this.roomSince = Math.min(Date.now(), message.receivedAt);
-          this.recordEvent({ kind: 'room-mode', ts: this.roomSince, from: previous?.mode ?? {}, to: message.mode });
+          if (previous && modeProfile(previous.mode) !== modeProfile(message.mode)) {
+            this.roomSince = Math.min(Date.now(), message.receivedAt);
+            this.recordEvent({ kind: 'room-mode', ts: this.roomSince, from: previous.mode, to: message.mode });
+          }
           this.viewerCounter.update(this.channel);
         }
         continue;
@@ -503,7 +506,9 @@ export class ChatXRayApp {
       }
     }
 
-    if (waveTriggered) {
+    if (waveTriggered || this.analyzer.confirmationDirty) {
+      this.analyzer.confirmationDirty = false;
+      this.viewerCounter.update(this.channel);
       this.syncBroadcast(true);
       this.binder.refresh();
     }
@@ -694,6 +699,7 @@ export class ChatXRayApp {
     window.setTimeout(() => {
       this.statsScheduled = false;
       this.statsView.update();
+      this.viewerCounter.update(this.channel);
     }, 250);
   }
 
@@ -705,7 +711,8 @@ export class ChatXRayApp {
     const roomMode = this.rooms.get(this.channel)?.mode ?? {};
     const access = chatAccess(roomMode);
     const since = this.chatSince ?? now;
-    const mixedMode = this.roomSince > since && now - this.roomSince < 600000;
+    const mixedMode = this.roomSince > since && now - this.roomSince < 600000 &&
+      this.observedEvents.some(event => event.kind === 'room-mode' && event.ts > Math.max(since, now - 600000));
     const windowModes = new Map();
     if (mixedMode) {
       for (const event of this.observedEvents) {
@@ -816,9 +823,11 @@ export class ChatXRayApp {
     this.viewerClock = new ObservationClock();
     this.chatSince = this.chatSince === null ? null : Math.max(this.chatSince, ts);
     this.viewerCounter.history.reset();
+    this.viewerCounter.recent = null;
     this.viewerCounter.lastModel = null;
     this.lastViewerSample = null;
     this.viewerGap = false;
+    this.analyzer.clearBotMemory();
     this.analyzer.waveCount = 0;
     this.analyzer.lastWave = null;
     this.lastCheckpoint = Date.now();
@@ -848,7 +857,17 @@ export class ChatXRayApp {
     const currentGroups = this.chatSince === null ? null : {
       groups: describeGroups(findIdGroups(records), records, true),
     };
+    if (currentGroups) {
+      for (const [start, wave] of this.analyzer.pastWaves) {
+        if (start < now - 600000 || !wave.rare.length) continue;
+        currentGroups.groups.push({
+          memberIds: wave.order, from: Math.min(...wave.order), to: Math.max(...wave.order),
+          outsideAuthorCount: wave.outsideCount, phrases: wave.rare,
+        });
+      }
+    }
     const update = {
+      confirmed: { ...this.analyzer.confirmed }, bonuses: structuredClone(this.analyzer.bonuses),
       intervals: { chat: this.chatClock.snapshot(), viewer: this.viewerClock.snapshot() },
       samples: complete ? [{ ts: now, er: model.engagement.percent }] : [],
       events: structuredClone(this.observedEvents.map(({ atTrigger, ...event }) => event)),
@@ -864,6 +883,8 @@ export class ChatXRayApp {
       if (data.checkpoint) {
         const checkpoint = checkpointMerge(data.checkpoint, { events: this.observedEvents });
         this.viewerCounter.history.restoreEvents(checkpoint.events);
+        this.analyzer.restoreBotMemory(checkpoint, data.history);
+        for (const record of records) this.analyzer.auditRecord(record);
         const saved = checkpoint.lastViewerModel;
         const live = this.viewerCounter.lastModel;
         if (this.restoredBroadcast !== identity && saved?.historyProfile === profile &&
@@ -879,6 +900,10 @@ export class ChatXRayApp {
         for (const record of records) {
           if (applyGroupHistoryBonus(record, this.groupRecurrence)) this.analyzer.auditRecord(record);
         }
+      }
+      if (this.analyzer.confirmationDirty) {
+        this.analyzer.confirmationDirty = false;
+        this.syncBroadcast(true);
       }
       this.binder.refresh();
     }).catch((error) => {
@@ -933,10 +958,11 @@ export class ChatXRayApp {
     const now = Date.now();
     const snapshot = this.capture.snapshot(
       now, this.analyzer.session.records, this.getViewerStats(now),
-      this.viewerCounter.model, this.settings
+      this.viewerCounter.model?.recentAge != null ? this.viewerCounter.lastModel : this.viewerCounter.model, this.settings
     );
     snapshot.broadcast = this.broadcast;
     const checkpoint = checkpointMerge(this.broadcastData?.checkpoint ?? {}, {
+      confirmed: { ...this.analyzer.confirmed }, bonuses: structuredClone(this.analyzer.bonuses),
       intervals: { chat: this.chatClock.snapshot(), viewer: this.viewerClock.snapshot() },
       events: this.observedEvents,
     });

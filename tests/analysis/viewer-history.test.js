@@ -221,3 +221,18 @@ it.each([
     });
   }
 });
+
+it('keeps a confirmed drop open while a large channel stays at its low', () => {
+  const history = new ViewerHistory();
+  const start = 1000000;
+  seed(history, start, 200000);
+  history.record(197000, start + 3000);
+  history.record(197000, start + 18000);
+  expect(history.getStats(start + 18000)).toMatchObject({
+    totalOutflows: 1, totalChurnEvents: 0, lastOutflow: { status: 'observing' },
+  });
+  history.record(200000, start + 21000);
+  expect(history.getStats(start + 21000)).toMatchObject({
+    totalOutflows: 1, totalChurnEvents: 1, lastOutflow: { status: 'recovered' },
+  });
+});

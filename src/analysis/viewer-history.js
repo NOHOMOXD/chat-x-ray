@@ -354,7 +354,7 @@ export class ViewerHistory {
       });
     }
 
-    if (value >= state.from * (1 - this.options.recoveryRatio)) {
+    if (state.event && !stillBelow && value >= state.from * (1 - this.options.recoveryRatio)) {
       if (now - state.at < this.options.dropConfirmMs) {
         this._closeDrop('unrecovered', now);
         return;

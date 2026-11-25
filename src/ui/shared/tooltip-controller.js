@@ -1,4 +1,3 @@
-import { chatAccess } from '../../platform/chat-mode.js';
 /*
  * Twitch Chat X-Ray — Tippy.js tooltip layer.
  *
@@ -101,7 +100,7 @@ export function buildBadgeTooltip(model) {
 
   root.appendChild(
     head(
-      model.neutral ? String(model.score) : t('tip.badge.points', { score: model.score }),
+      model.neutral ? model.score + '?' : t('tip.badge.points', { score: model.score }),
       model.roleExempt
         ? t('tip.badge.exempt')
         : t('tip.badge.subtitle'),
@@ -109,6 +108,7 @@ export function buildBadgeTooltip(model) {
     )
   );
 
+  if (model.neutral) root.appendChild(el('div', 'tcx-tip__note', t('tip.pendingBehavior')));
   const meter = el('div', 'tcx-tip__meter');
   const fill = el('span', 'tcx-tip__meter-fill');
   fill.style.width = `${Math.min(100, Math.max(0, model.score))}%`;
@@ -186,7 +186,7 @@ export function buildBadgeTooltip(model) {
 
 function statusHead(title, subtitle, status) {
   const header = head(title, subtitle);
-  const red = ['surge', 'churn', 'lowEr', 'wave', 'suspicious'].includes(status);
+  const red = ['surge', 'churn', 'outflow', 'lowEr', 'wave', 'suspicious'].includes(status);
   header.dataset.status = red ? 'alert' : status === 'ok' ? 'ok' : 'neutral';
   header.querySelector('.tcx-tip__dot').setAttribute('aria-hidden', 'true');
   return header;
@@ -249,36 +249,44 @@ export function buildViewerTooltip(model) {
   const root = el('div', 'tcx-tip tcx-tip--summary tcx-tip--viewer');
   const status = model.viewerStatus || 'waiting';
   root.appendChild(statusHead(t('tip.viewer.title'),
-    t('tip.viewer.official', { value: number(model.official) }), status));
+    model.official == null ? '' : t('tip.viewer.official', { value: number(model.official) }), status));
 
   const hero = el('div', 'tcx-tip__hero');
-  const gathering = !model.range && !model.stale && status !== 'disconnected' &&
-    model.loading && !model.loading.ready;
   if (model.range) {
     hero.appendChild(el('div', 'tcx-tip__hero-value tcx-tip__hero-value--range',
       formatViewerRange(model.range, locale)));
     hero.appendChild(el('div', 'tcx-tip__hero-caption',
-      t('tip.estimate') + (model.sessionMs < 600000 ? ' · ' + t('tip.provisional') : '')));
-  } else if (gathering) {
-    hero.appendChild(el('div', 'tcx-tip__hero-value tcx-tip__hero-value--loading',
-      t('tip.gathering', { percent: model.loading.percent })));
-    for (const check of model.loading.checks.filter(({ weight, done }) => weight && !done)) {
-      hero.appendChild(el('div', 'tcx-tip__loading-check', t('tip.missing.' + check.key, {
-        value: number(check.value), required: number(check.required),
-      })));
-    }
+      model.recentAge != null ? t('viewer.recentCaption', { age: model.recentAge }) : t('tip.estimate') + (model.sessionMs < 600000 ? ' · ' + t('tip.provisional') : '')));
   }
   if (hero.childElementCount) {
     root.appendChild(hero);
   }
 
   const list = el('div', 'tcx-tip__list');
-  const mode = chatModeLabel(model);
-  if (model.mixedMode) {
-    const modes = (model.windowModes ?? []).map(roomMode => chatModeLabel({ roomMode, chatAccess: chatAccess(roomMode) }));
-    list.appendChild(el('div', 'tcx-tip__note', [t('tip.mixedMode'), ...new Set(modes)].join(' · ')));
+  const summary = [];
+  if (model.waveCount) summary.push(t('tip.waveSummary', { count: model.waveCount,
+    label: t('tip.waves.' + new Intl.PluralRules(locale).select(model.waveCount)) }));
+  if (model.waveAlert && model.lastWave) summary.push(t('tip.waveAuthors', { count: model.lastWave.authors }));
+  if (model.churn?.totalSurges) summary.push(t('tip.surges') + ' · ' + model.churn.totalSurges);
+  const drop = model.churn?.lastOutflow;
+  if (drop?.from && Number.isFinite(drop.delta)) {
+    summary.push(t('tip.dropSummary') + ' ' + formatPercent(-drop.delta / drop.from * 100, locale, 1));
+    if (drop.status === 'recovered') summary.push(t('tip.dropRecovered'));
   }
-  if (mode) list.appendChild(el('div', 'tcx-tip__note', mode));
+  if (model.engagement?.alert) summary.push(t('tip.status.lowEr'));
+  if (model.stale || status === 'disconnected' || (!summary.length && model.range)) summary.unshift(t('tip.status.' + status));
+  if (summary.length) root.appendChild(el('strong', 'tcx-tip__status', summary.join(' · ')));
+  const mode = chatModeLabel(model);
+  if (mode) root.appendChild(el('div', 'tcx-tip__note', mode));
+  if (model.range) root.appendChild(el('div', 'tcx-tip__note', t('tip.estimateNote')));
+  if (!model.range) {
+    list.appendChild(row(t('viewer.observed'), number(model.observedChatters || 0)));
+    list.appendChild(row(t('tip.windowMessages'), number(model.audienceMessages ?? model.windowMessages ?? 0)));
+    if (model.churn?.lastSurge) appendAnomaly(list, model.churn.lastSurge, locale);
+    if (model.churn?.lastOutflow) appendAnomaly(list, model.churn.lastOutflow, locale);
+    root.appendChild(list);
+    return root;
+  }
   if (Number.isFinite(model.cleanUsers)) {
     list.appendChild(row(t('tip.viewer.clean'),
       t('tip.viewer.cleanValue', { clean: number(model.cleanUsers), active: number(model.activeUsers) })));
@@ -301,22 +309,13 @@ export function buildViewerTooltip(model) {
       covered === 10 ? 'tip.sliding' : 'tip.covered', { minutes: covered }
     )));
   }
-  if (!model.stale && model.chatAlert && model.activeUsers) {
+  if (!model.stale && model.chatAlert && !model.waveAlert && model.activeUsers) {
     list.appendChild(row(t('tip.chatAlertLabel'), t('tip.chatAlertValue', {
       suspicious: number(model.suspiciousUsers), active: number(model.activeUsers),
       threshold: model.threshold,
     })));
   }
   root.appendChild(list);
-  const reasons = [status === 'ok' && model.verdict?.key === 'clean'
-    ? t('verdict.clean') : t('tip.status.' + status)];
-  if (!model.stale && model.engagement?.alert && status !== 'lowEr') {
-    reasons.push(t('tip.status.lowEr'));
-  }
-  if ((!gathering || status !== 'waiting') && status !== model.chatAccess) {
-    root.appendChild(el('div', 'tcx-tip__status', reasons.join(' · ')));
-  }
-
   if (Number.isFinite(model.stableOfficial)) {
     list.appendChild(row(t('tip.medianLabel'), number(model.stableOfficial)));
   }
@@ -355,9 +354,7 @@ export function buildViewerTooltip(model) {
   } else if (churn?.lastAnomaly?.kind === 'churn') {
     appendAnomaly(list, churn.lastAnomaly, locale);
   }
-  if (model.range) {
-    root.appendChild(el('div', 'tcx-tip__note', t('tip.estimateNote')));
-  }
+
   return root;
 }
 

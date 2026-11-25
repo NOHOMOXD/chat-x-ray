@@ -4,13 +4,6 @@
  * Keeps Twitch's official viewer number untouched and appends an estimated
  * live range in parentheses, e.g. `56 090 (≈8–12,5 тыс.)`.
  *
- * A new user has no idea what the parentheses contain, and before the chat
- * sample is big enough there is no range at all. So while the estimate is
- * loading the counter says so explicitly — `(Загружаю… 66%)` for Russian and
- * `(Loading… 66%)` for English — and the percentage is the progress of the
- * same gates the estimate uses (observation time, clean chatters, messages).
- * Once the range exists it is shown instead of the percentage.
- *
  * The counter highlights recent movements in online viewers and low engagement.
  *
  * The estimate is built from clean unique chatters, not from the share of
@@ -26,8 +19,8 @@ import {
   setAttributeIfChanged,
   setTextIfChanged,
 } from '../shared/ui-utils.js';
-import { chatModeLabel } from '../../i18n/i18n.js';
 import { modeProfile } from '../../platform/chat-mode.js';
+import { MAX_OBSERVATION_GAP } from '../../analysis/observation-clock.js';
 import { broadcastProfile } from '../../analysis/broadcast-history.js';
 import { buildViewerModel } from '../../analysis/viewer-estimate.js';
 import { ViewerHistory } from '../../analysis/viewer-history.js';
@@ -35,7 +28,7 @@ import {
   buildViewerTooltip,
   tooltipController,
 } from '../shared/tooltip-controller.js';
-import { formatPercent, getLocale, t } from '../../i18n/i18n.js';
+import { getLocale, t } from '../../i18n/i18n.js';
 
 const VIEWER_COUNT_SELECTORS = [
   '[data-a-target="animated-channel-viewers-count"]',
@@ -102,77 +95,25 @@ export function parseTwitchViewerCount(rawText) {
 
 export { formatViewerRange };
 
-/**
- * Text inside the parentheses. Loading beats the range on purpose: while the
- * sample is short the range would be a wild guess, and the loading word shows
- * the state so a new user understands something is running.
- *
- * While loading the result is split into three parts — prefix, word, percent —
- * so the shown text reads "Загружаю… 66%": the animated ellipsis belongs after
- * the word (not after the counter) and the percentage stays last and still.
- */
 export function buildCounterParts(model) {
-  const loading = model.loading;
-  if (loading && !loading.ready) {
-    return {
-      loading: true,
-      prefix: ' (',
-      word: t('counter.loading'),
-      suffix: '…',
-      percent: loading.percent + '%',
-    };
-  }
-  const text = model.range
-    ? ` (≈${formatViewerRangeCompact(model.range, getLocale(), model.official)})`
-    : ` (${t('counter.loading')}…)`;
-  return { loading: false, text };
-}
-
-function counterAria(model) {
   const locale = getLocale();
-  const parts = [chatModeLabel(model)].filter(Boolean);
-  if (model.loading && !model.loading.ready) {
-    const checks = model.loading.checks
-      .filter((check) => check.weight > 0)
-      .map((check) =>
-        t(`counter.check.${check.key}`, {
-          value: formatNumber(check.value, locale),
-          minutes: check.value,
-          required: check.required,
-        })
-      );
-    parts.push(
-      t('counter.aria', {
-        percent: model.loading.percent,
-        done: model.loading.done,
-        required: model.loading.required,
-        checks: checks.join(', '),
-      })
-    );
-  }
-
   if (model.range) {
-    parts.push(t('viewer.rangeAria', { range: formatViewerRange(model.range) }));
-  } else if (model.loading && model.loading.ready) {
-    parts.push(t('viewer.noRange'));
+    const range = formatViewerRangeCompact(model.range, locale, model.official);
+    return { text: model.recentAge != null
+      ? ' · ' + t('viewer.recent', { range, age: model.recentAge }) : ' (≈' + range + ')' };
   }
-  parts.push(t('viewer.official', { value: formatNumber(model.official) }));
-  if (model.engagement) {
-    parts.push(
-      t('viewer.engagement', {
-        percent: formatPercent(model.engagement.percent, locale),
-      })
-    );
-  }
-  if (model.viewerStatus) {
-    parts.push(t('tip.status.' + model.viewerStatus));
-  }
-  return parts.join(' ');
+  const count = model.observedChatters || 0;
+  if (count) return { text: ' · ' + formatNumber(count, locale) + ' ' +
+    t('viewer.' + new Intl.PluralRules(locale).select(count)) };
+  const event = model.waveCount ? 'wave' : model.churn?.lastOutflow ? 'outflow' : model.churn?.totalSurges ? 'surge' : null;
+  return { text: event ? ' · ' + t('tip.status.' + event) : '' };
 }
 
 export class ViewerCounterAdjuster {
   constructor(options) {
     this.getStats = options.getStats;
+    this.getBroadcast = options.getBroadcast || (() => null);
+    this.getSaved = options.getSaved || (() => null);
     this.getSettings = options.getSettings;
     this.getMinute = options.getMinute || (() => null);
     this.countMessages = options.countMessages;
@@ -192,7 +133,6 @@ export class ViewerCounterAdjuster {
     this.el = null;
     this.targetNode = null;
     this.model = null;
-    this.lastText = '';
   }
 
   update(channel) {
@@ -213,7 +153,12 @@ export class ViewerCounterAdjuster {
     // like an enormous rollback on the new channel, so stay quiet until the
     // new page has settled.
     if (now < this.settleUntil) {
-      this.remove();
+      const stats = this.getStats(now);
+      const target = this._findViewerCountElement();
+      const observedChatters = Math.max(0, stats.activeUsers - stats.serviceBots);
+      if (settings.adjustViewerCounter && target && observedChatters) {
+        this._render(target, { observedChatters, audienceMessages: stats.audienceMessages, viewerStatus: 'waiting' });
+      } else this.remove();
       return;
     }
 
@@ -277,14 +222,16 @@ export class ViewerCounterAdjuster {
     model.viewerStatus = model.churn.lastAnomaly &&
       now - model.churn.lastAnomaly.ts < this.history.options.churnWindowMs
       ? model.churn.lastAnomaly.kind
-      : model.engagement?.alert ? 'lowEr'
+      : stats.waveAlert ? 'wave'
+          : model.churn.lastOutflow?.status === 'observing' ? 'outflow'
+          : model.engagement?.alert ? 'lowEr'
           : stats.chatConnected === false ? 'disconnected'
           : model.engagement?.measurable && model.range ? 'ok' : 'waiting';
     this.lastModel = model;
     this.onModel?.(model);
 
     if (settings.adjustViewerCounter) {
-      this._render(target, model);
+      this.renderMeasurement(target, model, now);
     } else {
       this.remove();
       this.model = model;
@@ -300,23 +247,33 @@ export class ViewerCounterAdjuster {
       this.remove();
       return;
     }
-    const target = this.targetNode?.isConnected ? this.targetNode
-      : document.querySelector('[data-tcx-ui="stats"]');
-    if (target) {
-      const { lastOutflow } = this.history.getStats(now);
-      const churn = { ...this.lastModel.churn, lastOutflow };
-      const stats = this.getStats(now);
-      const model = { ...this.lastModel, churn, stale: true, viewerStatus: 'stale' };
-      if (model.sampledAt < stats.windowSince) {
-        Object.assign(model, {
-          roomMode: stats.roomMode, chatAccess: stats.chatAccess, range: null,
-          engagement: null, erBaseline: null, loading: null,
-        });
-      }
-      this._render(target, model);
-    } else {
-      this.remove();
+    const target = this._findViewerCountElement();
+    if (!target) return this.remove();
+    const stats = this.getStats(now);
+    this.renderMeasurement(target, { ...this.lastModel, range: null, engagement: null,
+      observedChatters: Math.max(0, stats.activeUsers - stats.serviceBots) || 0,
+      audienceMessages: stats.audienceMessages, waveCount: stats.waveCount,
+      churn: this.history.getStats(now),
+      historyProfile: broadcastProfile({ ...settings, roomProfile: modeProfile(stats.roomMode) }),
+      viewerStatus: 'disconnected' }, now);
+  }
+
+  renderMeasurement(target, model, now) {
+    const identity = this.getBroadcast();
+    if (identity && model.range) this.recent = { identity, model };
+    if (identity && !model.range) {
+      const saved = [this.recent?.identity === identity && this.recent.model, this.getSaved()]
+        .filter(item => item?.range && item.historyProfile === model.historyProfile &&
+          item.sampledAt <= now && now - item.sampledAt <= MAX_OBSERVATION_GAP)
+        .sort((a, b) => b.sampledAt - a.sampledAt)[0];
+      if (saved) model = { ...model, range: saved.range, recentAge: Math.floor((now - saved.sampledAt) / 1000) };
     }
+    if (!buildCounterParts(model).text) {
+      this.remove();
+      this.model = model;
+      return;
+    }
+    this._render(target, model);
   }
 
   reset(channel) {
@@ -324,6 +281,7 @@ export class ViewerCounterAdjuster {
       this.channel = String(channel || '').toLowerCase();
     }
     this.remove();
+    this.recent = null;
     this.history.reset();
     this.lastModel = null;
     this.settleUntil = Date.now() + this.settleMs;
@@ -337,9 +295,6 @@ export class ViewerCounterAdjuster {
     this.el = null;
     this.targetNode = null;
     this.model = null;
-    this.lastText = '';
-    this.lastHtml = false;
-    this.textRefs = null;
   }
 
   _findViewerCountElement() {
@@ -371,73 +326,12 @@ export class ViewerCounterAdjuster {
 
     this.model = model;
 
-    const loading = !model.stale && Boolean(model.loading && !model.loading.ready);
-    const alertState = ['churn', 'surge', 'lowEr'].includes(model.viewerStatus);
-
-    this._renderText(model, loading);
-
-    this.el.classList.toggle('tcx-real-viewers--alert', alertState);
-    this.el.classList.toggle('tcx-real-viewers--loading', loading);
-    this.el.classList.toggle('tcx-real-viewers--nodata', !model.range && !loading);
-    this.el.dataset.tcxState = alertState ? 'alert' : loading ? 'loading' : model.viewerStatus;
-    this.el.dataset.tcxPercent = String(
-      model.loading ? model.loading.percent : 100
-    );
-
-    setAttributeIfChanged(this.el, 'aria-label', model.stale ? t('tip.status.stale') : counterAria(model));
+    const { text } = buildCounterParts(model);
+    setTextIfChanged(this.el, text);
+    const alert = ['churn', 'surge', 'lowEr', 'outflow', 'wave'].includes(model.viewerStatus);
+    this.el.classList.toggle('tcx-real-viewers--alert', alert);
+    this.el.dataset.tcxState = alert ? 'alert' : model.recentAge != null ? 'recent' : model.range ? 'range' : 'activity';
+    setAttributeIfChanged(this.el, 'aria-label', text.trim());
     tooltipController.refresh(this.el);
-  }
-
-  /**
-   * Write the parentheses text.
-   *
-   * Loading state is rendered as nested spans: the dots hang off the word
-   * ("Загружаю…") and the percentage comes last, so the digits never shift and
-   * the dots never appear after the "%". Both states are written through
-   * setTextIfChanged on their own nodes, so an unchanged value never produces
-   * a DOM write the page MutationObserver could react to.
-   */
-  _renderText(model, loading) {
-    const parts = model.stale ? { text: t('tip.status.stale') } : buildCounterParts(model);
-
-    if (!parts.loading) {
-      const text = parts.text;
-      if (this.lastHtml) {
-        this.el.textContent = '';
-        this.lastHtml = false;
-      }
-      setTextIfChanged(this.el, text);
-      this.lastText = text;
-      return;
-    }
-
-    const signature = parts.word + '|' + parts.percent;
-    if (this.lastHtml && this.textRefs && signature === this.lastText) {
-      return;
-    }
-
-    if (!this.textRefs || !this.lastHtml) {
-      this.el.textContent = '';
-      const prefix = document.createTextNode(parts.prefix);
-      const word = document.createElement('span');
-      word.className = 'tcx-real-viewers__word';
-      word.textContent = parts.word;
-      const percent = document.createElement('span');
-      percent.className = 'tcx-real-viewers__percent';
-      percent.textContent = parts.percent;
-      const close = document.createTextNode(')');
-      this.el.appendChild(prefix);
-      this.el.appendChild(word);
-      this.el.appendChild(document.createTextNode(' '));
-      this.el.appendChild(percent);
-      this.el.appendChild(close);
-      this.textRefs = { word, percent };
-      this.lastHtml = true;
-    } else {
-      setTextIfChanged(this.textRefs.word, parts.word);
-      setTextIfChanged(this.textRefs.percent, parts.percent);
-    }
-
-    this.lastText = signature;
   }
 }

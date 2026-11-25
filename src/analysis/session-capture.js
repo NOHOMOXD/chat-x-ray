@@ -18,9 +18,10 @@ export function summarizeRecords(records, settings, scaleOptions) {
     const key = record.userKey;
     const author = authors.get(key) || { score: 0, undiscounted: 0 };
     const discount = record.triggers.find((item) => item.key === 'veteran-account');
-    if (hasSuspiciousBehavior(record)) {
-      author.score = Math.max(author.score, record.botScore);
-      author.undiscounted = Math.max(author.undiscounted, record.botScore - (discount?.points || 0));
+    if (record.botConfirmation || hasSuspiciousBehavior(record)) {
+      const score = record.botConfirmation?.score ?? record.botScore;
+      author.score = Math.max(author.score, score);
+      author.undiscounted = Math.max(author.undiscounted, score - (discount?.points || 0));
     }
     author.serviceBot ||= record.serviceBot;
     author.ageSource = record.accountAgeSource === 'api' ? 'api' :

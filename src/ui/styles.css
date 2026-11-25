@@ -117,72 +117,6 @@
   color: #ff8080;
 }
 
-/* "Загружаю… 66%" / "Loading… 66%".
-   The animated ellipsis belongs to the *word*, not to the whole counter: it is
-   rendered after the nested .tcx-real-viewers__word span. Putting it on the
-   counter itself (::after) made the dots appear after the percentage, and the
-   percentage itself jumped around while the dot count changed. Keeping the
-   percentage last keeps its digits still. The dots live in a fixed-width box so
-   the following text never shifts. */
-.tcx-real-viewers--loading {
-  color: var(--color-text-alt, #adadb8);
-  opacity: 0.95;
-}
-
-.tcx-real-viewers__word {
-  display: inline;
-}
-
-/*
- * The dots box must sit on the text baseline. An inline-block with a fixed
- * width has its own line box, so the "." glyphs were rendered centered in it
- * and appeared to float above the word. Forcing line-height: inherit makes the
- * box exactly as tall as the surrounding text, which pins the dots to the same
- * baseline as "Загружаю".
- */
-.tcx-real-viewers__word::after {
-  content: "";
-  display: inline-block;
-  width: 1.2em;
-  height: 1em;
-  margin-left: 1px;
-  overflow: hidden;
-  line-height: inherit;
-  text-align: left;
-  vertical-align: baseline;
-  animation: tcx-loading-dots 1.2s steps(1, end) infinite;
-}
-
-.tcx-real-viewers__percent {
-  display: inline-block;
-  min-width: 2.4em;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.tcx-real-viewers--nodata {
-  color: #ff9b76;
-  opacity: 0.8;
-}
-
-@keyframes tcx-loading-dots {
-  0% {
-    content: ".";
-  }
-  25% {
-    content: "..";
-  }
-  50% {
-    content: "...";
-  }
-  75% {
-    content: "....";
-  }
-  100% {
-    content: ".";
-  }
-}
-
 @keyframes tcx-wave-pulse {
   0%,
   100% {
@@ -275,52 +209,6 @@
   color: inherit;
 }
 
-/* Loading percentage of the viewer estimate, visible without hovering. */
-.tcx-stats__loading {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  padding: 0 5px;
-  border: 1px solid var(--color-border-base, rgba(255, 255, 255, 0.16));
-  border-radius: 4px;
-  color: var(--color-text-alt, #adadb8);
-  font-size: 9.5px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.tcx-stats__loading b {
-  color: var(--color-text-base, #efeff1);
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  /* Fixed width keeps the strip from twitching between 9% and 100%. */
-  min-width: 2.6em;
-  text-align: right;
-}
-
-/* The animated dots belong to the word, never to the badge: on the badge they
-   would render after the percentage. */
-.tcx-stats__loading-word::after {
-  content: "";
-  display: inline-block;
-  width: 1.2em;
-  height: 1em;
-  margin-left: 1px;
-  overflow: hidden;
-  line-height: inherit;
-  text-align: left;
-  vertical-align: baseline;
-  animation: tcx-loading-dots 1.2s steps(1, end) infinite;
-}
-
-.tcx-stats__loading[hidden] {
-  display: none !important;
-}
-
-.tcx-stats--loading .tcx-stats__loading b {
-  font-variant-numeric: tabular-nums;
-}
-
 /* The same passive red signal as the viewer counter: a bot wave, or a
    suspicious share that reached the user's own threshold. */
 .tcx-stats--alert {
@@ -334,10 +222,6 @@
 
 .tcx-stats--alert .tcx-stats__metric b,
 .tcx-stats--alert .tcx-stats__metric .tcx-stats__label {
-  color: #ff8a8a;
-}
-
-.tcx-stats--alert .tcx-stats__loading b {
   color: #ff8a8a;
 }
 
@@ -1242,16 +1126,8 @@
   }
 
   .tcx-real-viewers--wave,
-  .tcx-stats[data-wave="1"] .tcx-stats__wave,
-  .tcx-real-viewers__word::after,
-  .tcx-stats__loading-word::after {
+  .tcx-stats[data-wave="1"] .tcx-stats__wave {
     animation: none;
-  }
-
-  /* Reduced motion: show a static "…" instead of cycling dots. */
-  .tcx-real-viewers__word::after,
-  .tcx-stats__loading-word::after {
-    content: "…";
   }
 
 }
@@ -1280,6 +1156,7 @@
 }
 
 .tcx-tip__status {
+  display: block;
   margin-top: 8px;
   font-weight: 600;
 }

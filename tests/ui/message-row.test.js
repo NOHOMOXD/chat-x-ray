@@ -207,6 +207,6 @@ it('shows a neutral score badge without hiding a high-scoring newcomer', () => {
   const row = makeRow();
   const view = new MessageRow(row, record({ botScore: 60, triggers: [{ key: 'first-msg' }] }));
   view.apply({ ...SETTINGS, hideSuspicious: true, getIdGroup: () => ({ memberIds: [1, 2] }) });
-  expect(row.querySelector('.tcx-bot-badge').textContent).toBe('60');
+  expect(row.querySelector('.tcx-bot-badge').textContent).toBe('60?');
   expect(isRowHidden(row)).toBe(false);
 });
