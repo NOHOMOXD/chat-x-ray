@@ -2,7 +2,9 @@
 
 **English** · [Русский](README.ru.md)
 
-Chat X-Ray flags suspicious accounts in Twitch chat and estimates the audience from chat activity. Everything runs in your browser. Available in English and Russian for Chrome, Edge, Opera, Firefox and Safari on Mac.
+Chat X-Ray flags suspicious accounts in Twitch chat and estimates the audience from chat activity. Everything runs in your browser. Available in English and Russian for Chrome, Edge, Opera, and Firefox.
+
+Safari is not currently supported.
 
 > Not affiliated with Twitch Interactive, Inc.
 
@@ -20,6 +22,14 @@ Chat X-Ray flags suspicious accounts in Twitch chat and estimates the audience f
   a spike and collapse in viewers turns the counter and chat bar red.
 - **Session export.** Optional JSON of everything seen this session.
 
+## Quick start
+
+1. Install the extension — steps below.
+2. After the first audience message, the chatter count appears in parentheses, for example (33). Hover to see collection progress, message totals and stream events.
+3. The estimate appears after one minute of observation, five audience messages and two chatters after filtering.
+
+After a break of up to two minutes, the calculation resumes from the saved window for the same broadcast. Time away is excluded. After a longer break, the previous compatible estimate and its age remain visible until a fresh range is ready.
+
 ## Install
 
 1. Open **[Releases](https://github.com/NOHOMOXD/chat-x-ray/releases)** and download the latest
@@ -35,7 +45,6 @@ Chat X-Ray flags suspicious accounts in Twitch chat and estimates the audience f
    the release has one.
 4. Open any Twitch channel.
 
-Safari on Mac needs Xcode: [Install and updates](docs/distribution.md).
 
 Building from source is for development only: [Development](docs/development.md).
 
@@ -62,7 +71,7 @@ exception is the optional account-age check, which you switch on yourself:
 | --- | --- |
 | [How the analysis works](docs/algorithm.md) | Signs, chat filter, viewer estimate, limits |
 | [Privacy](docs/privacy.md) | Permissions, stored data, the optional lookup |
-| [Install and updates](docs/distribution.md) | Per-browser steps, updates, Safari |
+| [Install and updates](docs/distribution.md) | Per-browser steps and updates |
 | [Optional Twitch data](docs/twitch-api-options.md) | What the Twitch APIs could add |
 
 MIT — see [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).

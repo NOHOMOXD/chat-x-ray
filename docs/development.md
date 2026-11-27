@@ -7,27 +7,27 @@ building and maintaining.
 
 ## From source
 
-Node 20+.
+Node 24+.
 
 ```bash
 npm ci
-npm run build:all    # dist/chrome, dist/firefox, dist/safari
+npm run build:all    # dist/chrome, dist/firefox
 ```
 
 Load `dist/chrome` as an unpacked extension, `dist/firefox/manifest.json` as a
-temporary add-on, or `dist/safari` via **Add Temporary Extension**.
+temporary add-on.
 
 | Command | What it does |
 | --- | --- |
+| `npm run typecheck` | Check migrated TypeScript sources and tests |
 | `npm test` | Unit + DOM tests (Vitest, happy-dom) |
-| `npm run build` / `build:firefox` / `build:safari` | One target |
+| `npm run build` / `build:firefox` | One target |
 | `npm run build:all` | All targets |
 | `npm run dev` | Rebuild on change |
 | `npm run test:e2e` | Real build in Playwright's Chromium and Firefox |
 | `npm run lint:firefox` | `web-ext lint` |
 | `npm run verify` | What CI runs |
-| `npm run package` | Zips and `SHA256SUMS.txt` in `release/` |
-| `npm run package:safari` | Xcode project in `release/` (macOS, full Xcode) |
+| `npm run package` | Browser and source ZIPs in `release/` |
 
 `src/` holds `app` (controller, background, options page), `core` (analyzer,
 R9K, ID groups), `analysis` (viewer estimate, history, capture), `platform`
@@ -35,7 +35,7 @@ R9K, ID groups), `analysis` (viewer estimate, history, capture), `platform`
 
 ## Scoring
 
-Source of truth: `WEIGHTS` in [src/core/analyzer.js](../src/core/analyzer.js).
+Source of truth: `WEIGHTS` in [src/core/score-message.ts](../src/core/score-message.ts).
 The ten account signals sum to 100; `HARD_SIGNAL_WEIGHTS.solicitation` adds
 +25 on top.
 
@@ -47,9 +47,7 @@ The ten account signals sum to 100; `HARD_SIGNAL_WEIGHTS.solicitation` adds
 | `username-digits` | 10 | `mechanical-rhythm` | 5 |
 | `first-msg` | 10 | `sterile-text` | 5 |
 
-Unknown account age adds 0. Privileged badges and `SERVICE_BOT_LOGINS` are
-exempt. `id-cluster` was cut to 15 when the ID window grew tenfold, and the old
-`mechanical` 10 was split into rhythm 5 + sterile text 5 for filtering.
+Unknown account age adds zero points. The official Twitch `bot-badge` and known service logins identify service bots. Audience counts exclude them. Privileged roles in the current channel are exempt from scoring. R9K still checks repeated messages.
 
 ## Notes
 
@@ -58,7 +56,7 @@ exempt. `id-cluster` was cut to 15 when the ID window grew tenfold, and the old
   asserts a forged message is dropped.
 - E2E serves a local fixture at `https://www.twitch.tv/`; Chrome dropped
   `--load-extension`, so Playwright's Chromium is used.
-- Session capture schema 1: UTC timestamps, setting changes, minute summaries,
+- Session capture schema 3: UTC timestamps, setting changes, minute summaries,
   viewer samples, gaps, raids, anomalies, last ten minutes of messages.
 
 ```bash
@@ -77,3 +75,18 @@ rebuilds the source ZIP cleanly and parallelises browser E2E. Pushing a tag
 `AMO_JWT_ISSUER` / `AMO_JWT_SECRET` enable Mozilla signing. Keep the Gecko ID
 and `data_collection_permissions: none`: both are required to keep Firefox
 users updating. `npm run package` must run on a clean checkout.
+
+## Reading the code
+
+The MAIN-world tap in `src/platform/inject.ts` feeds the IRC parser in
+`src/platform/irc-parser.ts`. `MessageBridge` validates the envelope and
+`ChatXRayApp.processMessages` in `src/app/app-controller.ts` sends chat messages through `src/app/process-chat-message.ts` to `Analyzer.ingest`. The browser entry point is `src/app/content.ts`.
+Base scoring and its reasons live in `src/core/score-message.ts`, repeat
+matching in `src/core/r9k-matcher.ts`, and row actions in
+`src/ui/chat/row-mode.ts`. Settings normalization and persistence live in
+`src/config/settings-model.ts` and `src/config/settings.ts` respectively.
+The settings window lives in `src/ui/settings/settings-panel.ts`; integration
+with Twitch's header and menu lives in `src/ui/settings/twitch-settings-integration.ts`
+and `src/ui/settings/twitch-settings-host.ts`.
+Broadcast history is managed by `src/analysis/broadcast-history.ts` and
+short-lived tab snapshots by `src/platform/tab-checkpoints.ts`.

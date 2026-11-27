@@ -3,13 +3,11 @@
  *
  *   npm run build      -> dist/chrome    (Manifest V3, Chrome/Edge/Opera)
  *   npm run build:firefox -> dist/firefox (Firefox >= 140)
- *   npm run build:safari -> dist/safari (Safari >= 18)
  *   npm run build:all  -> all browser targets
  *   npm run dev        -> watch mode
  *   npm run package    -> browser zips + sources from a clean Git checkout
  *
- * All targets share one manifest source. Safari resources can be converted
- * into a macOS app and extension with npm run package:safari.
+ * All targets share one manifest source.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,13 +23,15 @@ const ICONS = path.join(ROOT, 'icons');
 const TIPPY_CSS = path.join(ROOT, 'node_modules/tippy.js/dist/tippy.css');
 
 const argv = process.argv.slice(2);
+const knownOptions = new Set(['--watch', '--package', '--all', '--firefox-only', '--firefox']);
+const unknownOption = argv.find((option) => !knownOptions.has(option));
+if (unknownOption) throw new Error(`Unknown build option: ${unknownOption}`);
 const isWatch = argv.includes('--watch');
 const isPackage = argv.includes('--package');
 function selectedTargets() {
   if (isPackage) return ['chrome', 'firefox'];
-  if (argv.includes('--all')) return ['chrome', 'firefox', 'safari'];
+  if (argv.includes('--all')) return ['chrome', 'firefox'];
   if (argv.includes('--firefox-only')) return ['firefox'];
-  if (argv.includes('--safari-only')) return ['safari'];
   return argv.includes('--firefox') ? ['chrome', 'firefox'] : ['chrome'];
 }
 
@@ -41,10 +41,10 @@ const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
 const GECKO_ID = process.env.GECKO_ID || 'chat-x-ray@nohomoxd.github.io';
 
 const ENTRY_POINTS = [
-  path.join(SRC, 'app', 'background.js'),
-  { in: path.join(SRC, 'platform/inject.js'), out: 'inject' },
-  { in: path.join(SRC, 'app/content.js'), out: 'content' },
-  { in: path.join(SRC, 'app/options.js'), out: 'options' },
+  { in: path.join(SRC, 'app', 'background.ts'), out: 'background' },
+  { in: path.join(SRC, 'platform/inject.ts'), out: 'inject' },
+  { in: path.join(SRC, 'app/content.ts'), out: 'content' },
+  { in: path.join(SRC, 'app/options.ts'), out: 'options' },
 ];
 
 function freshDir(dir) {
@@ -119,8 +119,6 @@ function writeManifest(outDir, target) {
         strict_min_version: '142.0',
       },
     };
-  } else if (target === 'safari') {
-    manifest.browser_specific_settings = { safari: { strict_min_version: '18.0' } };
   }
 
   fs.writeFileSync(
@@ -135,7 +133,7 @@ function esbuildOptions(outDir, target) {
     outdir: outDir,
     bundle: true,
     format: 'iife',
-    target: { firefox: 'firefox140', chrome: 'chrome111', safari: 'safari18' }[target],
+    target: { firefox: 'firefox140', chrome: 'chrome111' }[target],
     platform: 'browser',
     sourcemap: isWatch ? 'inline' : false,
     minify: !isWatch,

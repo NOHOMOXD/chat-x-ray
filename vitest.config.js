@@ -6,13 +6,13 @@ export default defineConfig({
     // MutationObserver) instead of the hand-rolled fake nodes the old suite
     // used. Tests that only touch pure logic still run fine under it.
     environment: 'happy-dom',
-    include: ['tests/**/*.test.js'],
+    include: ['tests/**/*.test.ts'],
     restoreMocks: true,
     clearMocks: true,
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.js'],
-      exclude: ['src/inject.js'],
+      include: ['src/**/*.ts'],
+      exclude: ['src/platform/inject.ts'],
       reporter: ['text', 'lcov'],
     },
   },

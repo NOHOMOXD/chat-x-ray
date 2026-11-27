@@ -45,7 +45,7 @@ The estimate assumes that 8–12.5% of viewers write in chat over ten minutes. I
 All chat modes share one rolling estimate window, including unknown access. The popover lists active restrictions. Followers-only and unique-chat modes allow low-engagement alerts after ten minutes. Mixed and unknown windows are excluded from historical comparisons. Chat statistics show the most active author’s share over up to ten continuous minutes, excluding service bots.
 
 Chat and viewers are tracked separately: overlapping periods merge, gaps count
-as nothing, and after a break the ten-minute window starts over.
+as nothing. A confirmed broadcast resumes its rolling chat window after gaps of up to two minutes. After longer gaps a fresh window starts, with the last compatible estimate and its age shown until a new range is ready.
 
 ## History
 

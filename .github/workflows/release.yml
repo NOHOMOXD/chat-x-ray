@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - name: Validate release version
         id: version
@@ -49,6 +49,7 @@ jobs:
           unzip -q release/*-source.zip -d "$source_dir"
           cd "$source_dir"
           npm ci --prefer-offline --no-audit
+          npm run typecheck
           npm run build
           npm run build:firefox
       - name: Sign Firefox when AMO credentials are configured

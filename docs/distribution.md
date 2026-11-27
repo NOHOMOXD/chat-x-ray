@@ -29,17 +29,9 @@ temporary add-ons are loaded again after every restart. Export anything you
 want to keep before uninstalling: local storage, including broadcast history,
 can be removed with the extension.
 
-## Safari on Mac
+## Persistent installation in Firefox
 
-There is no "load unpacked" in Safari. Needs full Xcode and Safari 18+:
+Firefox Release and Beta require a Mozilla-signed add-on for persistent installation. You can submit the package for self-distribution without listing it publicly, then install the signed `.xpi`; you do not need to buy your own certificate. Each new version must be signed again, and without a configured update URL it must be installed manually. See Mozilla's [signing overview](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/) and [self-distribution guide](https://extensionworkshop.com/documentation/publish/self-distribution/).
 
-```bash
-npm ci
-npm run package:safari    # Xcode project in release/
-```
+`npm run package` produces an unsigned Firefox ZIP for temporary installation. The release workflow can also obtain a signed `.xpi` when AMO secrets are configured; without them the ZIP remains unsigned.
 
-Open the project, run the macOS app scheme once, then allow unsigned extensions
-in Safari's developer settings, enable Chat X-Ray and grant it access to Twitch.
-Quicker local check on Safari 18.4+: `npm run build:safari`, then **Add
-Temporary Extension** with `dist/safari`. Apple documents
-[signed distribution and unsigned local testing](https://developer.apple.com/documentation/safariservices/distributing-your-safari-web-extension).

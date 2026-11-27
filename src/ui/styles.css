@@ -94,14 +94,14 @@
   opacity: 1;
 }
 
-/* Warning (low engagement, churn) — warm orange. */
+/* Warning (low engagement, churn). */
 .tcx-real-viewers--alert {
-  color: #ff9b76;
+  color: #ff5c5c;
   opacity: 1;
 }
 
 .tcx-real-viewers--alert:hover {
-  color: #ffb997;
+  color: #ff8383;
 }
 
 /* A bot wave is the loudest passive signal: the whole suffix turns red and
@@ -478,7 +478,7 @@
   scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
 }
 
-/* A visible "more below" affordance: gradient strip pinned to the scrolling
+/* A visible "more below" affordance: a real button pinned to the scrolling
    edge. It only appears while rows are actually hidden below the fold. */
 .tcx-modal__scroller {
   position: relative;
@@ -487,8 +487,7 @@
   min-height: 0;
 }
 
-.tcx-modal__scroller::before {
-  content: attr(data-more);
+.tcx-modal__more {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -498,7 +497,8 @@
   align-items: flex-end;
   justify-content: center;
   height: 64px;
-  padding-bottom: 8px;
+  padding: 0 20px 8px;
+  border: 0;
   background: linear-gradient(
     180deg,
     rgba(24, 24, 27, 0) 0%,
@@ -506,16 +506,31 @@
     #18181b 72%
   );
   color: #bf94ff;
+  cursor: pointer;
+  font: inherit;
   font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  visibility: hidden;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 140ms ease;
+  transition: opacity 140ms ease, color 120ms ease;
 }
 
-.tcx-modal--scrollable .tcx-modal__scroller::before {
+.tcx-modal__more:hover,
+.tcx-modal__more:focus-visible {
+  color: #d6bbff;
+}
+
+.tcx-modal__more:focus-visible {
+  outline: 2px solid #a970ff;
+  outline-offset: -2px;
+}
+
+.tcx-modal--scrollable .tcx-modal__more {
+  visibility: visible;
+  pointer-events: auto;
   opacity: 1;
 }
 
@@ -681,7 +696,7 @@
 
 /* Twitch-style slider: a thick rounded track with the filled part in purple.
    The fill is painted with a hard-stop gradient driven by --tcx-range-pct,
-   which settings-panel.js keeps in sync with the current value. */
+   which settings-panel.ts keeps in sync with the current value. */
 .tcx-xray-panel input.tcx-range {
   display: block !important;
   width: 100% !important;
@@ -726,6 +741,45 @@
 
 .tcx-xray-panel input.tcx-range:focus-visible::-webkit-slider-thumb {
   box-shadow: 0 0 0 5px rgba(169, 112, 255, 0.4);
+}
+
+/* Firefox has no ::-webkit-slider-* pseudo-elements. Without the -moz- twins
+   the input falls back to the native thin widget: the thick track and the
+   purple fill simply do not render. */
+.tcx-xray-panel input.tcx-range::-moz-range-track {
+  height: 8px;
+  border: 0;
+  border-radius: 999px;
+  background: #3a3a3d;
+}
+
+.tcx-xray-panel input.tcx-range::-moz-range-progress {
+  height: 8px;
+  border: 0;
+  border-radius: 999px;
+  background: #a970ff;
+}
+
+.tcx-xray-panel input.tcx-range::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  background: #a970ff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+  transition: box-shadow 120ms ease;
+}
+
+.tcx-xray-panel input.tcx-range:hover::-moz-range-thumb {
+  box-shadow: 0 0 0 5px rgba(169, 112, 255, 0.28);
+}
+
+.tcx-xray-panel input.tcx-range:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 5px rgba(169, 112, 255, 0.4);
+}
+
+.tcx-xray-panel input.tcx-range::-moz-focus-outer {
+  border: 0;
 }
 
 /* Select ------------------------------------------------------------------ */
@@ -1206,3 +1260,9 @@
   border-top: 0;
   padding-top: 0;
 }
+
+.tcx-progress { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.tcx-progress-value { color: #bf94ff; font-variant-numeric: tabular-nums; }
+.tcx-progress-dots { animation: tcx-progress-pulse 1.2s ease-in-out infinite alternate; }
+@keyframes tcx-progress-pulse { to { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .tcx-progress-dots { animation: none; } }

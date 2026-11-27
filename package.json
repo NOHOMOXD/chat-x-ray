@@ -1,19 +1,17 @@
 {
   "name": "chat-x-ray",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
-  "description": "Local-only Twitch chat analysis: bot scoring, client-side R9K, audit log and a live-viewer estimate. Chrome/Edge/Opera, Firefox and Safari for macOS, RU/EN.",
+  "description": "Local-only Twitch chat analysis: bot scoring, client-side R9K, audit log and a live-viewer estimate. Chrome/Edge/Opera and Firefox, RU/EN.",
   "type": "module",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "scripts": {
     "build": "node build.js",
     "build:all": "node build.js --all",
     "build:firefox": "node build.js --firefox-only",
-    "build:safari": "node build.js --safari-only",
-    "package:safari": "node tools/package-safari.mjs",
     "dev": "node build.js --watch",
     "package": "node build.js --package",
     "test": "vitest run",
@@ -22,7 +20,8 @@
     "test:e2e": "playwright test",
     "test:all": "npm run test && npm run build:all && npm run test:e2e",
     "lint:firefox": "web-ext lint --source-dir dist/firefox --self-hosted",
-    "verify": "npm run test && npm run build:all && npm run lint:firefox && npm run test:e2e"
+    "verify": "npm run typecheck && npm run test && npm run build:all && npm run lint:firefox && npm run test:e2e",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.tests.json"
   },
   "keywords": [
     "twitch",
@@ -40,9 +39,14 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",
-    "esbuild": "^0.25.0",
+    "@types/chrome": "^0.3.8",
+    "@types/node": "^24.19.4",
+    "@vitest/coverage-v8": "^5.1.2",
+    "esbuild": "^0.28.2",
     "happy-dom": "^21.0.4",
-    "vitest": "^3.2.7",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.2",
     "web-ext": "^10.8.0"
   }
 }
