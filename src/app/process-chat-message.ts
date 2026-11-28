@@ -36,8 +36,11 @@ export function processChatMessage(host: ChatMessageHost, message: unknown): boo
   if (host.channel && messageChannel && messageChannel !== host.channel) return false;
 
   const now = Date.now();
-  host.chatSince ??= typeof message.receivedAt === 'number' && Number.isFinite(message.receivedAt)
+  const receivedAt = typeof message.receivedAt === 'number' && Number.isFinite(message.receivedAt)
     ? Math.min(now, message.receivedAt) : now;
+  if (host.chatSince === null || host.analyzer.session.records.length === 0) {
+    host.chatSince = Math.min(host.chatSince ?? receivedAt, receivedAt);
+  }
   const result = host.analyzer.ingest(message);
   if (result.duplicate || !result.record) return false;
 

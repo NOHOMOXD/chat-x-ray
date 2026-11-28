@@ -33,3 +33,19 @@ it('ignores a late message from the old channel and binds an accepted message on
   expect(processChatMessage(app, current)).toBe(false);
   expect(addPending).toHaveBeenCalledTimes(1);
 });
+
+it('includes the first message when its receipt precedes channel initialization', () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(100000);
+  const analyzer = new Analyzer();
+  const app: ChatMessageHost = {
+    channel: 'current', previousChannel: 'old', channelChangedAt: 100000,
+    lastMessageChannel: '', chatSince: 100000, analyzer,
+    binder: new MessageBinder({ getSettings: () => normalizeSettings({}) }),
+    accountAgeService: new AccountAgeService({ getSettings: () => ({ accountAgeLookup: false }) }),
+    groupRecurrence: null, resetChannel: vi.fn(), recordEvent: vi.fn(),
+  };
+  processChatMessage(app, { id: 'first', login: 'viewer', text: 'hello', channel: 'current', receivedAt: 99999 });
+  expect(app.chatSince).toBe(99999);
+  expect(analyzer.getStats(100000, app.chatSince!).activeUsers).toBe(1);
+});

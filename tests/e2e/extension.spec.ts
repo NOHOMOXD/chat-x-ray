@@ -329,8 +329,21 @@ test('reattaches the current room status after channel switches and viewer node 
   const viewer = '[data-a-target="animated-channel-viewers-count"]';
   const progress = page.locator(viewer + ' + [data-tcx-ui="real-viewers"][data-tcx-state="activity"]');
 
-
-  await writeOnce(page);
+  await page.evaluate(async () => {
+    const socket = window.__fixture.createChatSocket();
+    if (!socket) throw new Error('Missing chat socket');
+    const closed = new Promise(resolve => socket.addEventListener('close', resolve, { once: true }));
+    socket.close();
+    await closed;
+    window.roomSocket = socket;
+    socket.dispatchEvent(new Event('open'));
+  });
+  const writeTo = (channel: string) => {
+    const frame = privmsg({ id: channel, login: 'writer', userId: '103', text: 'hello' })
+      .replace('#testchannel', '#' + channel);
+    return page.evaluate(line => window.__fixture.deliver(window.roomSocket, line), frame);
+  };
+  await writeTo('testchannel');
   await expect(progress).toHaveText(/\(1\)/);
   const switchTo = (channel: string) => page.evaluate((name) => {
     history.pushState({}, '', '/' + name);
@@ -340,8 +353,10 @@ test('reattaches the current room status after channel switches and viewer node 
   }, channel);
   await switchTo('secondchannel');
   await expect(progress).toHaveCount(0);
+  await writeTo('secondchannel');
+  await expect(progress).toHaveText(/\(1\)/);
   await switchTo('thirdchannel');
-  await writeOnce(page, 'thirdchannel');
+  await writeTo('thirdchannel');
   await expect(progress).toHaveText(/\(1\)/, { timeout: 15000 });
 
 
