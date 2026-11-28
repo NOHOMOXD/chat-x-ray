@@ -41,11 +41,9 @@ export interface MessageRecord {
 
 export interface MessageSettings {
   showBadges: boolean;
-  muteSuspicious: boolean;
-  hideSuspicious: boolean;
+  suspectAction: 'keep' | 'mute' | 'hide';
   suspiciousThreshold: number;
-  clientR9K: boolean;
-  r9kAction: 'mute' | 'hide';
+  r9kAction: 'keep' | 'mute' | 'hide';
   getIdGroup?: (id: number | null) => IdGroup | undefined;
   getGroupHistory?: (id: number | null) => GroupHistory | undefined;
   observedBroadcasts?: number | undefined;
@@ -177,7 +175,7 @@ export class MessageRow {
           neutral: !isSuspicious(this.record, settings.suspiciousThreshold),
           r9kSimilarity: this.record.r9kSimilarity,
           roleExempt: this.record.roleExempt,
-          clientR9K: settings.clientR9K,
+          clientR9K: true,
           isBotWave: wave,
         });
       });

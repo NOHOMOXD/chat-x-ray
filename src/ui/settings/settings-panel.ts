@@ -1,26 +1,12 @@
 import type { Settings } from '../../config/settings-model.ts';
 import type { BotLogger } from '../../config/bot-logger.ts';
-import { BUTTON_ID, MENU_ROW_ID, MODAL_ID } from './settings-entrypoints.ts';
+import { BUTTON_ID, MODAL_ID } from './settings-entrypoints.ts';
 import { TwitchSettingsIntegration } from './twitch-settings-integration.ts';
 import { downloadJson } from '../shared/download-json.ts';
-/*
- * Twitch Chat X-Ray — settings entry points and floating settings window.
- *
- * How a user reaches the settings (same pattern as BetterTTV): the native
- * Chat Settings popover gets a labelled "Chat X-Ray Settings" row, exactly like
- * BTTV adds "BetterTV Settings". Opening the gear therefore never stretches or
- * restyles the native menu — the row is one line, and the real options open in
- * our own modal dialog window.
- *
- * A small gear button is also pinned into the chat header as a shortcut and as
- * a fallback for popout/embedded chat where Twitch renders no settings popover.
- * Both entry points open the same modal, which is built with DOM nodes only,
- * owns its open/close lifecycle (Escape, backdrop click, close button) and
- * every label goes through t() so it follows the UI language.
- */
 import { DEFAULTS } from '../../config/settings.ts';
 import { setTextIfChanged } from '../shared/ui-utils.ts';
 import { t } from '../../i18n/i18n.ts';
+import { createScoreHelp } from './score-help.ts';
 
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string) {
@@ -36,7 +22,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
 
 type BooleanSetting = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
 const BOOLEAN_SETTINGS: ReadonlySet<string> = new Set([
-  'showBadges', 'muteSuspicious', 'hideSuspicious', 'clientR9K', 'enableAuditLog',
+  'showBadges', 'enableAuditLog',
   'recordSession', 'adjustViewerCounter', 'accountAgeLookup', 'showChatStats',
 ]);
 function isBooleanSetting(key: string | undefined): key is BooleanSetting {
@@ -46,7 +32,6 @@ function isBooleanSetting(key: string | undefined): key is BooleanSetting {
 interface SettingsOptions {
   getSettings: () => Settings;
   onCommit: (settings: Settings) => void;
-  onPreview?: (settings: Settings) => void;
   getLogger?: () => BotLogger | null;
   clearHistory?: () => Promise<unknown>;
   downloadSession?: (previous: boolean) => void;
@@ -55,7 +40,6 @@ interface SettingsOptions {
 export class SettingsModal {
   private readonly getSettings: SettingsOptions['getSettings'];
   private readonly onCommit: SettingsOptions['onCommit'];
-  private readonly onPreview: NonNullable<SettingsOptions['onPreview']>;
   private readonly getLogger: NonNullable<SettingsOptions['getLogger']>;
   private readonly clearHistory: SettingsOptions['clearHistory'];
   private readonly downloadSession: NonNullable<SettingsOptions['downloadSession']>;
@@ -68,20 +52,16 @@ export class SettingsModal {
   constructor(options: SettingsOptions) {
     this.getSettings = options.getSettings;
     this.onCommit = options.onCommit;
-    this.onPreview = options.onPreview || (() => {});
     this.getLogger = options.getLogger || (() => null);
     this.clearHistory = options.clearHistory;
     this.downloadSession = options.downloadSession || (() => {});
     this.sessionAvailability = [false, false];
-    this.integration = new TwitchSettingsIntegration(
-      () => this.openModal(), () => this.toggle()
-    );
+    this.integration = new TwitchSettingsIntegration(() => this.toggle());
 
     this.modal = null;
     this.refs = null;
     this.open = false;
 
-    this._onInput = this._onInput.bind(this);
     this._onChange = this._onChange.bind(this);
     this._onKeyDown = this._onKeyDown.bind(this);
     this._onPointerDown = this._onPointerDown.bind(this);
@@ -96,10 +76,6 @@ export class SettingsModal {
   stop() {
     this.close();
     this.integration.stop();
-  }
-
-  ensureMenuRow() {
-    return this.integration.ensureMenuRow();
   }
 
   ensureButton() {
@@ -186,22 +162,14 @@ export class SettingsModal {
     const inputs = this.modal.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-tcx-setting]');
     for (const input of inputs) {
       const key = input.dataset.tcxSetting;
-      if (key === 'suspiciousThreshold' && input instanceof HTMLInputElement) {
-        const value = String(settings.suspiciousThreshold);
-        if (input.value !== value) input.value = value;
-        this._paintRange(input, settings.suspiciousThreshold);
-      } else if (key === 'r9kAction' || key === 'language') {
-        if (input.value !== settings[key]) input.value = settings[key];
-        if (key === 'r9kAction') input.disabled = !settings.clientR9K;
+      if (key === 'suspiciousThreshold') {
+        input.value = String(settings.suspiciousThreshold);
+      } else if (key === 'r9kAction' || key === 'suspectAction' || key === 'language') {
+        input.value = settings[key];
       } else if (isBooleanSetting(key) && input instanceof HTMLInputElement) {
         const checked = settings[key];
         if (input.checked !== checked) input.checked = checked;
       }
-    }
-
-    const output = this.modal.querySelector('[data-tcx-output="threshold"]');
-    if (output) {
-      setTextIfChanged(output, settings.suspiciousThreshold + '/100');
     }
 
     const auditSection = this.modal.querySelector<HTMLElement>('.tcx-audit-section');
@@ -282,32 +250,24 @@ export class SettingsModal {
     const body = el('div', 'tcx-modal__body tcx-xray-panel');
     this.refs = {};
 
-    // ---- badges & filtering
+    // ---- R9K and filtering
+    body.appendChild(this._sectionLabel('settings.section.r9k'));
+    const actions = [
+      { value: 'keep', key: 'options.keep' },
+      { value: 'mute', key: 'settings.r9kMute' },
+      { value: 'hide', key: 'settings.r9kHide' },
+    ];
+    body.appendChild(this._selectRow('settings.r9kAction', 'r9kAction', 'settings.r9kActionAria', actions));
     body.appendChild(this._sectionLabel('settings.section.filters'));
     body.appendChild(this._toggleRow('settings.showBadges', 'showBadges'));
-    body.appendChild(this._toggleRow('settings.mute', 'muteSuspicious'));
-    body.appendChild(this._toggleRow('settings.hide', 'hideSuspicious'));
+    body.appendChild(this._selectRow('options.action', 'suspectAction', 'options.action', actions));
     body.appendChild(this._thresholdRow());
+    body.appendChild(createScoreHelp('tcxI18n'));
 
     // ---- chat
     body.appendChild(this._sectionLabel('settings.section.chat'));
-    body.appendChild(
-      this._toggleRow('settings.showChatStats', 'showChatStats')
-    );
+    body.appendChild(this._toggleRow('settings.showChatStats', 'showChatStats'));
     body.appendChild(this._help('settings.showChatStatsHelp'));
-
-    // ---- R9K
-    body.appendChild(this._sectionLabel('settings.section.r9k'));
-    body.appendChild(this._toggleRow('settings.r9k', 'clientR9K'));
-    body.appendChild(this._selectRow(
-      'settings.r9kAction',
-      'r9kAction',
-      'settings.r9kActionAria',
-      [
-        { value: 'mute', key: 'settings.r9kMute' },
-        { value: 'hide', key: 'settings.r9kHide' },
-      ]
-    ));
 
     // ---- data
     body.appendChild(this._sectionLabel('settings.section.data'));
@@ -318,6 +278,7 @@ export class SettingsModal {
     body.appendChild(
       this._toggleRow('settings.accountAge', 'accountAgeLookup')
     );
+    body.appendChild(this._help('settings.accountAgeHelp'));
     body.appendChild(this._auditSection());
     body.appendChild(this._toggleRow('settings.recordSession', 'recordSession'));
     const exports = el('div', 'tcx-audit-btn-group');
@@ -395,7 +356,6 @@ export class SettingsModal {
 
     // Bound once in the constructor; the dialog is re-created with every
     // open() and dropped together with its listeners in close().
-    dialog.addEventListener('input', this._onInput);
     dialog.addEventListener('change', this._onChange);
     overlay.appendChild(dialog);
 
@@ -449,24 +409,6 @@ export class SettingsModal {
     }
   }
 
-  /** Keep the purple fill of the threshold slider in sync with its value. */
-  _paintRange(range: HTMLInputElement, value: number | string) {
-    if (!range || !range.style || typeof range.style.setProperty !== 'function') {
-      return;
-    }
-    const min = Number(range.min) || 10;
-    const max = Number(range.max) || 100;
-    const current = Number(value);
-    if (!Number.isFinite(current)) {
-      return;
-    }
-    const percent = ((current - min) / (max - min)) * 100;
-    range.style.setProperty(
-      '--tcx-range-pct',
-      Math.min(100, Math.max(0, percent)).toFixed(1) + '%'
-    );
-  }
-
   _help(key: string) {
     const help = el('p', 'tcx-xray-panel__help', t(key));
     help.dataset.tcxI18n = key;
@@ -490,40 +432,12 @@ export class SettingsModal {
   }
 
   _thresholdRow() {
-    const row = el('div', 'tcx-xray-panel__row tcx-xray-panel__row--block');
-
-    const head = el('div', 'tcx-xray-panel__slider-head');
-    const label = el('span', 'tcx-xray-panel__label', t('settings.threshold'));
-    label.dataset.tcxI18n = 'settings.threshold';
-
-    const output = el(
-      'output',
-      'tcx-xray-panel__output',
-      this.getSettings().suspiciousThreshold + '/100'
-    );
-    output.dataset.tcxOutput = 'threshold';
-
-    head.appendChild(label);
-    head.appendChild(output);
-
-    const range = document.createElement('input');
-    range.type = 'range';
-    range.className = 'tcx-range';
-    range.min = '10';
-    range.max = '100';
-    range.step = '5';
-    range.dataset.tcxSetting = 'suspiciousThreshold';
-    this._paintRange(range, this.getSettings().suspiciousThreshold);
-    range.dataset.tcxI18n = 'settings.thresholdAria';
-    range.dataset.tcxI18nAttr = 'aria-label';
-    range.setAttribute('aria-label', t('settings.thresholdAria'));
-
-    const help = this._help('settings.thresholdHelp');
-
-    row.appendChild(head);
-    row.appendChild(range);
-    row.appendChild(help);
-    return row;
+    return this._selectRow('settings.threshold', 'suspiciousThreshold', 'settings.threshold', [
+      { value: '10', key: 'settings.threshold10' },
+      { value: '30', key: 'settings.threshold30' },
+      { value: '50', key: 'settings.threshold50' },
+      { value: '70', key: 'settings.threshold70' },
+    ]);
   }
 
   _selectRow(labelKey: string, settingKey: string, ariaKey: string, options: Array<{ value: string; key: string }>) {
@@ -620,24 +534,6 @@ export class SettingsModal {
 
   // ------------------------------------------------------------------- events
 
-  _onInput(event: Event) {
-    const target = event.target;
-    if (
-      !(target instanceof HTMLInputElement) ||
-      target.dataset.tcxSetting !== 'suspiciousThreshold'
-    ) {
-      return;
-    }
-
-    const output =
-      this.modal && this.modal.querySelector('[data-tcx-output="threshold"]');
-    if (output) {
-      setTextIfChanged(output, target.value + '/100');
-    }
-    this._paintRange(target, target.value);
-    this.onPreview(this._collectSettings());
-  }
-
   _onChange(event: Event) {
     const target = event.target;
     if (!(target instanceof HTMLElement) || !target.dataset.tcxSetting) {
@@ -658,8 +554,8 @@ export class SettingsModal {
       const key = input.dataset.tcxSetting;
       if (key === 'suspiciousThreshold') {
         next.suspiciousThreshold = Number(input.value);
-      } else if (key === 'r9kAction' && (input.value === 'mute' || input.value === 'hide')) {
-        next.r9kAction = input.value;
+      } else if ((key === 'r9kAction' || key === 'suspectAction') && (input.value === 'keep' || input.value === 'mute' || input.value === 'hide')) {
+        next[key] = input.value;
       } else if (key === 'language' && (input.value === '' || input.value === 'ru' || input.value === 'en')) {
         next.language = input.value;
       } else if (isBooleanSetting(key) && input instanceof HTMLInputElement) {
@@ -703,4 +599,4 @@ function root() {
   return (document && document.body) || document.documentElement;
 }
 
-export { BUTTON_ID, MENU_ROW_ID, MODAL_ID };
+export { BUTTON_ID, MODAL_ID };

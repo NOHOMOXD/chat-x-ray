@@ -9,18 +9,18 @@
     <header><img src="icons/icon48.png" alt="" width="40" height="40"><h1>Chat X-Ray</h1></header>
     <nav><a href="#settings" data-i18n="options.heading"></a><a href="#help" data-i18n="options.help"></a></nav>
     <div id="settings">
-<section><h2 data-i18n="options.filters"></h2>
-<label class="row"><span data-i18n="options.badge"></span><input type="checkbox" data-opt-setting="showBadges"></label>
-<label class="row"><span data-i18n="options.thresholdLabel"></span><span class="range"><input type="range" min="10" max="100" step="5" data-opt-setting="suspiciousThreshold"><output id="threshold-output">30/100</output></span></label>
-<label class="row"><span data-i18n="options.action"></span><select data-opt-setting="suspectAction"><option value="keep" data-i18n="options.keep"></option><option value="mute" data-i18n="settings.r9kMute"></option><option value="hide" data-i18n="settings.r9kHide"></option></select></label></section>
-<section><h2 data-i18n="options.repeats"></h2>
-<label class="row"><span data-i18n="settings.r9k"></span><input type="checkbox" data-opt-setting="clientR9K"></label>
-<label class="row"><span data-i18n="settings.r9kAction"></span><select data-opt-setting="r9kAction"><option value="mute" data-i18n="settings.r9kMute"></option><option value="hide" data-i18n="settings.r9kHide"></option></select></label></section>
+<section><h2 data-i18n="settings.section.r9k"></h2>
+<label class="row"><span data-i18n="settings.r9kAction"></span><select data-opt-setting="r9kAction"><option value="keep" data-i18n="options.keep"></option><option value="mute" data-i18n="settings.r9kMute"></option><option value="hide" data-i18n="settings.r9kHide"></option></select></label></section>
+<section><h2 data-i18n="settings.section.filters"></h2>
+<label class="row"><span data-i18n="settings.showBadges"></span><input type="checkbox" data-opt-setting="showBadges"></label>
+<label class="row"><span data-i18n="options.action"></span><select data-opt-setting="suspectAction"><option value="keep" data-i18n="options.keep"></option><option value="mute" data-i18n="settings.r9kMute"></option><option value="hide" data-i18n="settings.r9kHide"></option></select></label>
+<label class="row"><span data-i18n="settings.threshold"></span><select data-opt-setting="suspiciousThreshold"><option value="10" data-i18n="settings.threshold10"></option><option value="30" data-i18n="settings.threshold30"></option><option value="50" data-i18n="settings.threshold50"></option><option value="70" data-i18n="settings.threshold70"></option></select></label>
+<div data-score-help></div></section>
 <section><h2 data-i18n="options.stats"></h2>
 <label class="row"><span data-i18n="settings.showChatStats"></span><input type="checkbox" data-opt-setting="showChatStats"></label>
 <label class="row"><span data-i18n="options.estimate"></span><input type="checkbox" data-opt-setting="adjustViewerCounter"></label></section>
 <section><h2 data-i18n="options.data"></h2>
-<label class="row"><span data-i18n="settings.accountAge"></span><input type="checkbox" data-opt-setting="accountAgeLookup"></label>
+<label class="row"><span data-i18n="settings.accountAge"></span><input type="checkbox" data-opt-setting="accountAgeLookup"></label><p data-i18n="settings.accountAgeHelp"></p>
 <label class="row"><span data-i18n="settings.audit"></span><input type="checkbox" data-opt-setting="enableAuditLog"></label>
 <label class="row"><span data-i18n="settings.recordSession"></span><input type="checkbox" data-opt-setting="recordSession"></label>
 <p data-i18n="options.exportHint"></p>
@@ -30,7 +30,7 @@
     <div id="help" hidden>
 <section><h2 data-i18n="options.cardScore.title"></h2>
 <p data-i18n="options.scoreHelp"></p>
-<details><summary data-i18n="options.weights"></summary><p data-i18n="options.cardScore.body"></p></details></section>
+<div data-score-help></div></section>
 <section><h2 data-i18n="options.cardR9k.title"></h2>
 <p data-i18n="options.repeatHelp"></p></section>
 <section><h2 data-i18n="options.cardViewers.title"></h2>

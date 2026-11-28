@@ -229,7 +229,6 @@ export class ChatXRayApp {
       getLogger: () => this.analyzer.logger,
       downloadSession: (previous) => this.downloadSession(previous),
       clearHistory: () => this.clearHistory(),
-      onPreview: (next) => this.applySettings(next, false),
       onCommit: (next) => this.applySettings(next, true),
     });
 
@@ -372,7 +371,6 @@ export class ChatXRayApp {
     // Re-pin the settings entry points when Twitch re-renders the header or
     // opens its Chat Settings popover.
     this.settingsPanel.ensureButton();
-    this.settingsPanel.ensureMenuRow();
   }
 
   handleAccountAge(login: string, ageDays: number) {
@@ -959,8 +957,7 @@ export class ChatXRayApp {
         this.settingsPanel.syncAuditCount();
       }
       this.settingsPanel.ensureButton();
-      this.settingsPanel.ensureMenuRow();
-    } catch (error) {
+      } catch (error) {
       console.warn('[Twitch Chat X-Ray] maintenance error', error);
     }
   }

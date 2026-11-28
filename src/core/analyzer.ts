@@ -4,7 +4,7 @@ import { restoreBotConfirmations, updateBotConfirmation } from './bot-confirmati
 import type { ConfirmationRecord } from './bot-confirmation.ts';
 import { applyWaveBoost } from './wave-boost.ts';
 import { applyAccountAge } from './apply-account-age.ts';
-import { scoreMessage, WEIGHTS } from './score-message.ts';
+import { HISTORY_WEIGHTS, scoreMessage, WEIGHTS } from './score-message.ts';
 import { ID_GROUP_RULE, describeGroups, findIdGroups, recordsAt, summarizeMatches } from './id-group-diagnostics.ts';
 /*
  * Twitch Chat X-Ray — message analyzer.
@@ -341,8 +341,9 @@ export class Analyzer {
       for (const entry of bucket.records) {
         for (const [key, ids] of [['wave-order', evidence.ordered], ['wave-phrase', evidence.repeated]] as const) {
           if (!entry.waveBoost || entry.numericUserId === null || !ids.has(entry.numericUserId) || entry.triggers.some(t => t.key === key)) continue;
-          entry.triggers.push({ key, labelKey: 'trigger.' + key, points: 10 });
-          entry.botScore = Math.min(100, entry.botScore + 10);
+          const points = key === 'wave-order' ? HISTORY_WEIGHTS.waveOrder : HISTORY_WEIGHTS.wavePhrase;
+          entry.triggers.push({ key, labelKey: 'trigger.' + key, points });
+          entry.botScore = Math.min(100, entry.botScore + points);
           this.auditRecord(entry);
         }
       }

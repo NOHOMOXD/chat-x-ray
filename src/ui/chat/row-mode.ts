@@ -1,4 +1,4 @@
-import { isSuspicious } from '../../core/chat-session.ts';
+import { getMessageActions } from '../../core/message-actions.ts';
 import type { SuspicionRecord } from '../../core/chat-session.ts';
 import type { Settings } from '../../config/settings-model.ts';
 
@@ -8,34 +8,13 @@ export interface RowRecord extends SuspicionRecord {
   waveBoost?: boolean;
 }
 
-type RowSettings = Pick<Settings,
-  'suspiciousThreshold' | 'hideSuspicious' | 'muteSuspicious' | 'clientR9K' | 'r9kAction'>;
+type RowSettings = Pick<Settings, 'suspiciousThreshold' | 'suspectAction' | 'r9kAction'>;
 
 export function resolveRowMode(record: RowRecord, settings: RowSettings) {
-  const threshold = settings.suspiciousThreshold;
-  const suspicious = isSuspicious(record, threshold);
-  let mode: 'none' | 'mute' | 'hide' = 'none';
-
-  if (suspicious) {
-    if (settings.hideSuspicious) {
-      mode = 'hide';
-    } else if (settings.muteSuspicious) {
-      mode = 'mute';
-    }
-  }
-
-  if (
-    settings.clientR9K &&
-    (record.isR9KDuplicate || record.spamFlood)
-  ) {
-    if (settings.r9kAction === 'hide') {
-      mode = 'hide';
-    } else if (mode !== 'hide') {
-      mode = 'mute';
-    }
-  }
-
-  return mode;
+  const { score: scoreAction, repeat: repeatAction } = getMessageActions(record, settings);
+  if (scoreAction === 'hide' || repeatAction === 'hide') return 'hide';
+  if (scoreAction === 'mute' || repeatAction === 'mute') return 'mute';
+  return 'none';
 }
 
 /**

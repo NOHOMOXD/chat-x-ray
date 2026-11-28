@@ -32,6 +32,13 @@ export const HARD_SIGNAL_WEIGHTS = Object.freeze({
   solicitation: 25,
 });
 
+export const HISTORY_WEIGHTS = Object.freeze({
+  wavePhrase: 10,
+  waveOrder: 10,
+  groupRecurrence: 10,
+  returning: 10,
+});
+
 interface ScoreInput {
   roleExempt: boolean;
   hasBadges: boolean;

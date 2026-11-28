@@ -1,3 +1,5 @@
+import { HISTORY_WEIGHTS } from '../core/score-message.ts';
+
 interface Phrase {
   fingerprint: string;
   substantive: boolean;
@@ -78,7 +80,7 @@ export function readGroupObservation(value: unknown): GroupObservation | null {
 }
 
 const MAX_BROADCASTS = 20;
-const COORDINATION_BONUS = 10;
+const COORDINATION_BONUS = HISTORY_WEIGHTS.groupRecurrence;
 const MIN_SHARED_SPEAKERS = 2;
 const encoder = new TextEncoder();
 

@@ -30,3 +30,8 @@ summary { color: #d5bcff; }
 @media (max-width: 36rem) {
   .row:has(select), .row:has(.range) { align-items: flex-start; flex-direction: column; gap: .35rem; }
 }
+.tcx-score-help { margin: .75rem 0; }
+.tcx-score-help dl { margin: .75rem 0; }
+.tcx-score-help dl > div { padding: .5rem 0; border-top: 1px solid #35323c; }
+.tcx-score-help dt { display: flex; justify-content: space-between; gap: 1rem; font-weight: 600; }
+.tcx-score-help dd { margin: .2rem 0 0; color: #ccc8d5; }

@@ -47,19 +47,17 @@ Building from source is for development only: [Development](docs/development.md)
 
 ## Settings
 
-Twitch's own **Chat Settings** (gear under chat) gets a **Chat X-Ray Settings**
-row at the bottom, like BetterTTV. There is also a gear in the chat header and
-a settings page in the extension itself.
+Open Chat X-Ray settings with its icon in the Twitch chat header or on the extension settings page.
 
 - What to do with flagged accounts: keep, mute or hide.
-- What the chat filter does with repeats: mute or hide.
+- What the chat filter does with repeats: keep, mute or hide.
 - Bot threshold (default **30**), chat bar, viewer counter, session recording,
-  optional account-age check, interface language.
+  account-age check, interface language.
 
 ## Your data
 
-One permission, `storage`. Nothing is sent anywhere by default. The only
-exception is the optional account-age check, which you switch on yourself:
+One permission, `storage`. The account-age check is enabled by default and
+requests creation dates from Twitch for eligible accounts. It can be disabled:
 [Privacy](docs/privacy.md).
 
 ## Docs

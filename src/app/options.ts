@@ -5,6 +5,7 @@
  * rendered with the active UI language, so the page is English on English
  * browsers and Russian on Russian ones.
  */
+import { createScoreHelp } from '../ui/settings/score-help.ts';
 import { createBroadcastHistoryClient } from '../platform/broadcast-history-client.ts';
 import { SettingsRepository, normalizeSettings, DEFAULTS } from '../config/settings.ts';
 import {
@@ -18,10 +19,10 @@ import {
   'use strict';
 
   const repository = new SettingsRepository();
+  document.querySelectorAll('[data-score-help]').forEach((node) => node.appendChild(createScoreHelp('i18n')));
 
   const inputs = Array.from(document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-opt-setting]'));
   const saveState = document.getElementById('save-state');
-  const thresholdOutput = document.getElementById('threshold-output');
   const resetButton = document.getElementById('reset-settings');
   const languageSelect = document.querySelector('[data-opt-setting="language"]');
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -89,23 +90,14 @@ import {
     const values: Record<string, unknown> = { ...settings };
     inputs.forEach((input) => {
       const key = input.dataset.optSetting;
-      if (key === 'suspectAction') {
-        input.value = settings.hideSuspicious ? 'hide' : settings.muteSuspicious ? 'mute' : 'keep';
+      if (key === 'suspectAction' || key === 'r9kAction' || key === 'language') {
+        input.value = settings[key];
       } else if (key === 'suspiciousThreshold') {
         input.value = String(settings.suspiciousThreshold);
-      } else if (key === 'r9kAction' || key === 'language') {
-        input.value = settings[key];
-        if (key === 'r9kAction') {
-          input.disabled = !settings.clientR9K;
-        }
       } else {
         if (input instanceof HTMLInputElement) input.checked = Boolean(key && values[key]);
       }
     });
-
-    if (thresholdOutput) {
-      thresholdOutput.textContent = settings.suspiciousThreshold + '/100';
-    }
 
     if (languageSelect) {
       // "Auto" follows the browser; show which language that resolves to.
@@ -121,21 +113,15 @@ import {
     const next: Record<string, unknown> = { ...settings };
     inputs.forEach((input) => {
       const key = input.dataset.optSetting;
-      if (key === 'suspectAction') {
-        next.muteSuspicious = input.value === 'mute';
-        next.hideSuspicious = input.value === 'hide';
-      } else if (key === 'suspiciousThreshold') {
+      if (key === 'suspiciousThreshold') {
         next[key] = Number(input.value);
-      } else if (key === 'r9kAction' || key === 'language') {
+      } else if (key === 'suspectAction' || key === 'r9kAction' || key === 'language') {
         next[key] = input.value;
       } else if (key) {
         next[key] = input instanceof HTMLInputElement && Boolean(input.checked);
       }
     });
 
-    if (next.muteSuspicious && next.hideSuspicious) {
-      next.muteSuspicious = false;
-    }
     return normalizeSettings(next);
   }
 
@@ -152,19 +138,7 @@ import {
     });
   }
 
-  inputs.forEach((input) => {
-    if (input.type === 'range') {
-      input.addEventListener('input', () => {
-        if (thresholdOutput) {
-          thresholdOutput.textContent = input.value + '/100';
-        }
-      });
-      input.addEventListener('change', commit);
-      return;
-    }
-
-    input.addEventListener('change', commit);
-  });
+  inputs.forEach((input) => input.addEventListener('change', commit));
 
   if (resetButton) {
     resetButton.addEventListener('click', () => {

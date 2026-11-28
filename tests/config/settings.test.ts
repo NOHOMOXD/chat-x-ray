@@ -27,10 +27,10 @@ function fakeStorage(initial: Record<string, unknown>, { delay = 0 } = {}) {
 }
 
 describe('defaults', () => {
-  it('dims suspicious messages and repeats by default and respects saved choices', () => {
-    expect(normalizeSettings({})).toMatchObject({ clientR9K: true, muteSuspicious: true, r9kAction: 'mute' });
-    const saved = { clientR9K: false, muteSuspicious: false, r9kAction: 'hide' };
-    expect(normalizeSettings(saved)).toMatchObject(saved);
+  it('keeps messages unchanged by default and migrates saved choices', () => {
+    expect(normalizeSettings({})).toMatchObject({ suspectAction: 'keep', r9kAction: 'keep', accountAgeLookup: true, recordSession: false });
+    expect(normalizeSettings({ clientR9K: false, muteSuspicious: true, r9kAction: 'hide', accountAgeLookup: false, recordSession: true }))
+      .toMatchObject({ r9kAction: 'keep', suspectAction: 'mute', accountAgeLookup: false, recordSession: true });
   });
 
   it('ship a 30% threshold and a visible stats strip', () => {
@@ -45,13 +45,9 @@ describe('defaults', () => {
 });
 
 describe('clampThreshold', () => {
-  it('clamps to 10..100 and rounds to the 5% step', () => {
-    expect(clampThreshold(5)).toBe(10);
-    expect(clampThreshold(73)).toBe(75);
-    expect(clampThreshold(14)).toBe(15);
-    expect(clampThreshold(120)).toBe(100);
-    expect(clampThreshold('abc')).toBe(30);
-    expect(clampThreshold(undefined)).toBe(30);
+  it('accepts presets and resets other values', () => {
+    for (const value of [10, 30, 50, 70]) expect(clampThreshold(value)).toBe(value);
+    for (const value of [5, 45, 90, 100, 'abc', undefined]) expect(clampThreshold(value)).toBe(30);
   });
 });
 
@@ -66,13 +62,12 @@ describe('normalizeSettings', () => {
       muteSuspicious: true,
       hideSuspicious: true,
     });
-    expect(settings.hideSuspicious).toBe(true);
-    expect(settings.muteSuspicious).toBe(false);
+    expect(settings.suspectAction).toBe('hide');
   });
 
   it('keeps only supported R9K actions', () => {
     expect(normalizeSettings({ r9kAction: 'hide' }).r9kAction).toBe('hide');
-    expect(normalizeSettings({ r9kAction: 'explode' }).r9kAction).toBe('mute');
+    expect(normalizeSettings({ r9kAction: 'explode' }).r9kAction).toBe('keep');
   });
 
   it('accepts ru/en and treats anything else as auto', () => {
@@ -85,9 +80,9 @@ describe('normalizeSettings', () => {
 
 describe('SettingsRepository', () => {
   it('loads stored settings', async () => {
-    const storage = fakeStorage({ [STORAGE_KEY]: { suspiciousThreshold: 60 } });
+    const storage = fakeStorage({ [STORAGE_KEY]: { suspiciousThreshold: 50 } });
     const repository = new SettingsRepository(storage);
-    expect((await repository.load()).suspiciousThreshold).toBe(60);
+    expect((await repository.load()).suspiciousThreshold).toBe(50);
   });
 
   it('falls back to defaults when storage is missing or throws', async () => {
@@ -104,15 +99,15 @@ describe('SettingsRepository', () => {
     // Regression: a save() issued before load() resolved used to persist the
     // in-memory defaults over the user's real record.
     const storage = fakeStorage(
-      { [STORAGE_KEY]: { suspiciousThreshold: 80, showBadges: false } },
+      { [STORAGE_KEY]: { suspiciousThreshold: 70, showBadges: false } },
       { delay: 20 }
     );
     const repository = new SettingsRepository(storage);
 
-    const saving = repository.save({ suspiciousThreshold: 80, showBadges: false });
+    const saving = repository.save({ suspiciousThreshold: 70, showBadges: false });
 
     await saving;
-    expect(storage._data()[STORAGE_KEY]).toMatchObject({ suspiciousThreshold: 80, showBadges: false });
+    expect(storage._data()[STORAGE_KEY]).toMatchObject({ suspiciousThreshold: 70, showBadges: false });
   });
 
   it('serialises saves so the last write wins', async () => {
@@ -128,7 +123,7 @@ describe('SettingsRepository', () => {
 
   it('is a no-op without a storage area', async () => {
     const repository = new SettingsRepository(null);
-    const saved = await repository.save({ suspiciousThreshold: 35 });
-    expect(saved.suspiciousThreshold).toBe(35);
+    const saved = await repository.save({ suspiciousThreshold: 50 });
+    expect(saved.suspiciousThreshold).toBe(50);
   });
 });

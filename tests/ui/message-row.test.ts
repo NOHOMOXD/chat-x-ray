@@ -8,11 +8,9 @@ import {
 
 const SETTINGS = {
   showBadges: true,
-  muteSuspicious: false,
-  hideSuspicious: false,
+  suspectAction: 'keep',
   suspiciousThreshold: 25,
-  clientR9K: false,
-  r9kAction: 'mute',
+  r9kAction: 'keep',
 } as const;
 
 function record(overrides: Partial<RowRecord> = {}) {
@@ -35,35 +33,34 @@ describe('resolveRowMode', () => {
 
   it('mutes or hides accounts at/above the threshold', () => {
     expect(
-      resolveRowMode(record({ botScore: 25 }), { ...SETTINGS, muteSuspicious: true })
+      resolveRowMode(record({ botScore: 25 }), { ...SETTINGS, suspectAction: 'mute' })
     ).toBe('mute');
     expect(
-      resolveRowMode(record({ botScore: 25 }), { ...SETTINGS, hideSuspicious: true })
+      resolveRowMode(record({ botScore: 25 }), { ...SETTINGS, suspectAction: 'hide' })
     ).toBe('hide');
   });
 
   it('does not act below the threshold', () => {
     expect(
-      resolveRowMode(record({ botScore: 20 }), { ...SETTINGS, hideSuspicious: true })
+      resolveRowMode(record({ botScore: 20 }), { ...SETTINGS, suspectAction: 'hide' })
     ).toBe('none');
   });
 
   it('applies R9K actions when enabled', () => {
     const r9k = record({ botScore: 0, isR9KDuplicate: true });
     expect(
-      resolveRowMode(r9k, { ...SETTINGS, clientR9K: true, r9kAction: 'hide' })
+      resolveRowMode(r9k, { ...SETTINGS, r9kAction: 'hide' })
     ).toBe('hide');
     expect(
-      resolveRowMode(r9k, { ...SETTINGS, clientR9K: true, r9kAction: 'mute' })
+      resolveRowMode(r9k, { ...SETTINGS, r9kAction: 'mute' })
     ).toBe('mute');
-    expect(resolveRowMode(r9k, { ...SETTINGS, clientR9K: false })).toBe('none');
+    expect(resolveRowMode(r9k, { ...SETTINGS, r9kAction: 'keep' })).toBe('none');
   });
 
   it('treats a character flood like an R9K duplicate', () => {
     expect(
       resolveRowMode(record({ botScore: 0, spamFlood: true }), {
         ...SETTINGS,
-        clientR9K: true,
         r9kAction: 'hide',
       })
     ).toBe('hide');
@@ -75,8 +72,7 @@ describe('resolveRowMode', () => {
     expect(
       resolveRowMode(record({ botScore: 0, isR9KDuplicate: true }), {
         ...SETTINGS,
-        hideSuspicious: true,
-        clientR9K: true,
+        suspectAction: 'hide',
         r9kAction: 'mute',
       })
     ).toBe('mute');
@@ -85,8 +81,7 @@ describe('resolveRowMode', () => {
     expect(
       resolveRowMode(record({ botScore: 0, isR9KDuplicate: true }), {
         ...SETTINGS,
-        hideSuspicious: true,
-        clientR9K: true,
+        suspectAction: 'hide',
         r9kAction: 'hide',
       })
     ).toBe('hide');
@@ -95,8 +90,7 @@ describe('resolveRowMode', () => {
     expect(
       resolveRowMode(record({ botScore: 50, isR9KDuplicate: true }), {
         ...SETTINGS,
-        hideSuspicious: true,
-        clientR9K: true,
+        suspectAction: 'hide',
         r9kAction: 'mute',
       })
     ).toBe('hide');

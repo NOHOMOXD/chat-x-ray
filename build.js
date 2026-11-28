@@ -78,7 +78,7 @@ function copySharedAssets(outDir) {
     recursive: true,
   });
   for (const icon of fs.readdirSync(ICONS)) {
-    if (icon.endsWith('.png')) {
+    if (icon.endsWith('.png') || icon === 'chat-xray-toolbar.svg') {
       fs.copyFileSync(path.join(ICONS, icon), path.join(outDir, 'icons', icon));
     }
   }

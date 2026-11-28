@@ -242,9 +242,9 @@ export class MessageBinder {
     if (!settings) {
       return;
     }
-    const hideSuspicious = settings.hideSuspicious === true;
+    const hideSuspicious = settings.suspectAction === 'hide';
     const hideR9K =
-      settings.clientR9K === true && settings.r9kAction === 'hide';
+      settings.r9kAction === 'hide';
     if (!hideSuspicious && !hideR9K) {
       return;
     }

@@ -1,3 +1,4 @@
+import { HISTORY_WEIGHTS } from './score-message.ts';
 import type { AnalysisTrigger, AnalyzerRecord, BotConfirmation } from './analyzer-record.ts';
 import { BEHAVIOR_TRIGGERS, isSuspicious } from './chat-session.ts';
 
@@ -18,8 +19,8 @@ export function updateBotConfirmation(record: ConfirmationRecord, state: Confirm
   const previous = state.previousReasons.get(id);
   if (!state.confirmed[id] && previous && record.triggers.some(trigger => previous.has(trigger.key)) &&
       !state.bonuses[id]?.returning && !record.triggers.some(trigger => trigger.key === 'returning')) {
-    record.triggers.push({ key: 'returning', labelKey: 'trigger.returning', points: 10 });
-    record.botScore = Math.min(100, record.botScore + 10);
+    record.triggers.push({ key: 'returning', labelKey: 'trigger.returning', points: HISTORY_WEIGHTS.returning });
+    record.botScore = Math.min(100, record.botScore + HISTORY_WEIGHTS.returning);
   }
   let changed = false;
   const earned = state.bonuses[id] ?? {};

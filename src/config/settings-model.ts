@@ -2,11 +2,9 @@ import { normalizeLocale } from '../i18n/i18n.ts';
 
 export interface Settings {
   showBadges: boolean;
-  muteSuspicious: boolean;
-  hideSuspicious: boolean;
+  suspectAction: 'keep' | 'mute' | 'hide';
   suspiciousThreshold: number;
-  clientR9K: boolean;
-  r9kAction: 'hide' | 'mute';
+  r9kAction: 'keep' | 'hide' | 'mute';
   enableAuditLog: boolean;
   recordSession: boolean;
   adjustViewerCounter: boolean;
@@ -20,50 +18,43 @@ export const DEFAULT_THRESHOLD = 30;
 
 export const DEFAULTS = Object.freeze({
   showBadges: true,
-  muteSuspicious: true,
-  hideSuspicious: false,
+  suspectAction: 'keep',
   suspiciousThreshold: DEFAULT_THRESHOLD,
-  clientR9K: true,
-  r9kAction: 'mute',
+  r9kAction: 'keep',
   enableAuditLog: false,
   recordSession: false,
   adjustViewerCounter: true,
-  accountAgeLookup: false,
+  accountAgeLookup: true,
   showChatStats: true,
   // '' follows the browser language; 'ru'/'en' pin it.
   language: '',
 });
 
-/** Clamp to the slider range (10..100) and round to its 5% step. */
+/** Accept only the supported threshold presets. */
 export function clampThreshold(value: unknown) {
   const number = Number(value);
-  if (!Number.isFinite(number)) {
-    return DEFAULTS.suspiciousThreshold;
-  }
-  return Math.min(100, Math.max(10, Math.round(number / 5) * 5));
+  return [10, 30, 50, 70].includes(number) ? number : DEFAULT_THRESHOLD;
 }
 
 export function normalizeSettings(raw: unknown): Settings {
   const source: Record<string, unknown> = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   const settings: Settings = {
     showBadges: source.showBadges !== false,
-    muteSuspicious: source.muteSuspicious !== false,
-    hideSuspicious: source.hideSuspicious === true,
+    suspectAction: source.suspectAction === 'hide' || source.suspectAction === 'mute' || source.suspectAction === 'keep'
+      ? source.suspectAction
+      : source.hideSuspicious === true ? 'hide' :
+        source.muteSuspicious === true || (source.muteSuspicious !== false && 'hideSuspicious' in source) ? 'mute' : 'keep',
     suspiciousThreshold: clampThreshold(source.suspiciousThreshold),
-    clientR9K: source.clientR9K !== false,
-    r9kAction: source.r9kAction === 'hide' ? 'hide' : 'mute',
+    r9kAction: source.clientR9K === false ? 'keep' :
+      source.r9kAction === 'hide' || source.r9kAction === 'mute' ? source.r9kAction :
+        source.clientR9K === true && source.r9kAction === undefined ? 'mute' : 'keep',
     enableAuditLog: source.enableAuditLog === true,
     recordSession: source.recordSession === true,
     adjustViewerCounter: source.adjustViewerCounter !== false,
-    accountAgeLookup: source.accountAgeLookup === true,
+    accountAgeLookup: source.accountAgeLookup !== false,
     showChatStats: source.showChatStats !== false,
     language: normalizeLocale(source.language) || '',
   };
-
-  // "Hide" wins over "Mute" when both are somehow set.
-  if (settings.hideSuspicious) {
-    settings.muteSuspicious = false;
-  }
 
   return settings;
 }

@@ -1,7 +1,7 @@
 /*
  * Twitch Chat X-Ray — optional account-age lookup (unofficial GQL).
  *
- * Only active when the user turns on the "accountAgeLookup" setting. It asks
+ * Active when the "accountAgeLookup" setting is enabled, including by default. It asks
  * Twitch's public web GraphQL endpoint for `user.createdAt` of accounts that
  * already look suspicious, batches requests, caches results for the tab and
  * never blocks chat analysis. The extension remains fully local when the

@@ -12,7 +12,7 @@ The extension observes chat and the Twitch viewer counter in the open tab. Analy
 | `35?` | The score reached the threshold but no behavioural signal was found. The author counts toward the audience estimate. |
 | `ID` | The score is below the threshold, but the author belongs to a dense group of nearby IDs. This badge alone does not mark the author as suspicious. |
 
-The default threshold is **30 points**, adjustable from 10 to 100. For example, no badges, no colour and a first message add up to 35 points and `35?`. A mechanical rhythm can then produce `BOT 40`. Confirmation lasts until the broadcast ends. Hover over a badge to see the reasons.
+The default threshold is **30 points**, with presets of 10, 30, 50 and 70. For example, no badges, no colour and a first message add up to 35 points and `35?`. A mechanical rhythm can then produce `BOT 40`. Confirmation lasts until the broadcast ends. Hover over a badge to see the reasons.
 
 Moderators, VIPs, subscribers, the broadcaster and service bots are exempt from scoring. Service bots are recognised by Twitch's `bot-badge` or a known login.
 
@@ -23,7 +23,7 @@ Moderators, VIPs, subscribers, the broadcaster and service bots are exempt from 
 | Digits in username | +10 | A long numeric suffix or a high proportion of digits. |
 | First message | +10 | Twitch marked it as the author's first message in the channel. |
 | Nearby IDs | +15 | At least two other unbadged accounts appeared in the last 10 minutes with IDs less than 50,000 away. |
-| New account | +10 | Known age under 90 days, with no badges or colour. Age lookup is off by default. |
+| New account | +10 | Known age under 90 days, with no badges or colour. Age lookup is on by default. |
 | Wave | +10 | An unbadged account posted during an unusual burst of such messages. |
 | Mechanical rhythm | +5 | At least three messages at nearly equal intervals. |
 | Sterile text | +5 | A long unbadged message without slang, emoji, links or mentions, subject to further text checks. |
@@ -44,7 +44,7 @@ For rhythm, the average interval must be between one second and 15 minutes, with
 
 R9K checks exact repeats over 15 minutes and similar messages among the last 1,000 messages in that period. The similarity threshold is 85%, or 75% for short replies. Character floods are filtered too, without adding points.
 
-R9K is on by default and mutes matches. Messages from suspicious authors are also muted by default. Either action can be set to hide in settings. R9K also applies to privileged users.
+R9K detects matches by default. Both repeats and suspicious messages are left unchanged by default. Each action can be set to mute or hide in settings. R9K also applies to privileged users.
 
 ## Viewer estimate
 

@@ -4,7 +4,7 @@ import { DEFAULTS } from '../../src/config/settings.ts';
 
 it('exports ordinary messages, preserves minute history and measures age discount crossings', () => {
   const start = 1_000_000;
-  const settings = { ...DEFAULTS, clientR9K: true, muteSuspicious: true };
+  const settings = { ...DEFAULTS, r9kAction: 'mute' as const, suspectAction: 'mute' as const };
   const capture = new SessionCapture('example', start);
   capture.updateSettings(settings, start);
   const stats = { sessionMs: 600_000, audienceMessages: 5, activeUsers: 3, cleanUsers: 2 };

@@ -17,7 +17,7 @@ Everything works on your computer.
 
 ## The one optional request
 
-The **account-age check** is off by default. When on, it asks
+The **account-age check** is on by default. When enabled, it asks
 `gql.twitch.tv` — the endpoint twitch.tv itself uses — for the creation date of
 accounts that scored at least 30 points or could still reach your threshold.
 Requests are batched, rate-limited, carry no cookies, and results stay in tab

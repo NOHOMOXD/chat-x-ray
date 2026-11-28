@@ -1,4 +1,5 @@
 import { hasSuspiciousBehavior, isSuspicious } from '../core/chat-session.ts';
+import { getMessageActions } from '../core/message-actions.ts';
 import { ID_GROUP_RULE, describeGroups, findIdGroups, recordsAt } from '../core/id-group-diagnostics.ts';
 import { DEFAULTS as ANALYZER_DEFAULTS } from '../core/analyzer-config.ts';
 import { WEIGHTS } from '../core/score-message.ts';
@@ -62,9 +63,9 @@ export function summarizeRecords(records: CaptureRecord[], settings: CaptureSett
       (author.ageSource || record.accountAgeSource || 'unknown');
     authors.set(key, author);
 
-    const scoreAction = (settings.muteSuspicious || settings.hideSuspicious) &&
-      isSuspicious(record, settings.suspiciousThreshold);
-    const r9kAction = settings.clientR9K && (record.isR9KDuplicate || record.spamFlood);
+    const actionsForMessage = getMessageActions(record, settings);
+    const scoreAction = actionsForMessage.score !== 'keep';
+    const r9kAction = actionsForMessage.repeat !== 'keep';
     if (scoreAction || r9kAction) {
       actions[scoreAction && r9kAction ? 'both' : scoreAction ? 'scoreOnly' : 'r9kOnly'] += 1;
     }
