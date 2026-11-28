@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildViewerTooltip } from '../../src/ui/shared/tooltip-viewer.ts';
+import { t } from '../../src/i18n/i18n.ts';
 
 describe('viewer tooltip', () => {
   it('renders a saved range and a viewer movement', () => {
@@ -10,6 +11,7 @@ describe('viewer tooltip', () => {
     });
     expect(tooltip.querySelector('.tcx-tip__hero-value')?.textContent).toContain('100');
     expect(tooltip.querySelector('.tcx-tip__event')?.textContent).toContain('300');
+    expect(tooltip.textContent).toContain(t('tip.viewer.window'));
   });
 
   it('ignores malformed external events and displays the loading state', () => {

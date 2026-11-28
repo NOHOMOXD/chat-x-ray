@@ -22,6 +22,10 @@ function roomMode(value: unknown): value is RoomMode {
 export function decodeBridgeControl(value: unknown): DecodedControl {
   if (!object(value) || typeof value.kind !== 'string') return null;
   const kind = value.kind;
+  if (['broadcast-offline', 'broadcast-identity', 'room-state', 'raid'].includes(kind)) {
+    if (typeof value.channel !== 'string' || !/^[a-z0-9_]{1,25}$/i.test(value.channel)) return { kind: 'invalid' };
+    value.channel = value.channel.toLowerCase();
+  }
   if (kind === 'socket-open' || kind === 'socket-close') {
     return typeof value.socketId === 'number' && Number.isSafeInteger(value.socketId)
       ? { ...value, kind, socketId: value.socketId } : { kind: 'invalid' };

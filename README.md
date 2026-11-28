@@ -10,16 +10,13 @@ Safari is not currently supported.
 
 ## What you see
 
-- **Bot badge.** A `BOT 65` chip before a suspicious nickname, gold to red.
-  Hover it to see which signs added points. Moderators, VIPs, subscribers, the
-  broadcaster and known service bots are never flagged.
+- **Badges.** `BOT 65` flags a suspicious author, `35?` shows points without a behavioural signal, and `ID` marks a member of a dense ID group. Hover for details.
 - **Chat filter.** Near-duplicates, pastes and character floods from the last
   15 minutes are muted or hidden if you want.
 - **Viewer estimate.** An estimated audience size appears next to Twitch’s official count.
 
 - **Chat activity.** The first message shows the unique chatter count. The viewer range appears when enough activity has been observed.
-- **Red warnings.** A wave of suspicious accounts, low chat-to-viewer ratio or
-  a spike and collapse in viewers turns the counter and chat bar red.
+- **Red warnings.** The viewer counter flags waves, low chat activity and viewer-count anomalies. The chat bar separately flags waves and a high share of suspicious authors.
 - **Session export.** Optional JSON of everything seen this session.
 
 ## Quick start

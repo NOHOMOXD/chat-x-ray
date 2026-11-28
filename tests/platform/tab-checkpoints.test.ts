@@ -13,6 +13,17 @@ function fakeStorage(initial: Record<string, unknown> = {}) {
   };
 }
 
+it('replaces a future snapshot while retaining lease protection', async () => {
+  const key = 'tcx:reload:v2:1:example';
+  const now = Date.now();
+  const storage = fakeStorage({ [key]: { lease: 'current', snapshot: { channel: 'example', savedAt: now + 60000 } } });
+  const tabs = new TabCheckpoints(storage as unknown as chrome.storage.StorageArea, true);
+  expect(await tabs.save(1, 'old', { channel: 'example', savedAt: now })).toBe(false);
+  expect(await tabs.save(1, 'current', { channel: 'example', savedAt: now })).toBe(true);
+  expect(await tabs.open(1, 'next', true, 'example')).toMatchObject({ savedAt: now });
+  expect(await tabs.save(1, 'current', { channel: 'example', savedAt: now })).toBe(false);
+});
+
 it('does not let an older document lease overwrite the latest snapshot', async () => {
   const tabs = new TabCheckpoints(fakeStorage() as unknown as chrome.storage.StorageArea, true);
   const snapshot = { channel: 'example', savedAt: Date.now(), identity: { id: '1' } };

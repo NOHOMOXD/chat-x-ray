@@ -58,6 +58,7 @@ import {
   broadcastLiveKey,
   conflictingBroadcasts,
   createLiveSnapshot,
+  resumedWindow,
   restoreLiveSnapshot,
   sameLiveBroadcast,
 } from '../analysis/live-state.ts';
@@ -378,6 +379,7 @@ export class ChatXRayApp {
     if (!this.started || !this.settings.accountAgeLookup) {
       return;
     }
+    if (this.analyzer.accountAges.get(login.toLowerCase()) === ageDays) return;
     const changed = this.analyzer.applyAccountAge(login, ageDays);
     if (changed) {
       this.binder.refresh();
@@ -517,15 +519,21 @@ export class ChatXRayApp {
   getViewerStats(now = Date.now(), displayWindow = false) {
     const since = this.chatSince ?? now;
     this.restoreTabCoverage();
+    const formula = this.formulaClock.snapshot(this.chatSince !== null && !this.frozen ? now : undefined);
+    const pendingFormula = this.restoredTab?.formula ?? [];
+    const windowStart = resumedWindow([...pendingFormula, ...formula], now).start;
+    this.analyzer.session.retentionStart = windowStart;
+    this.viewerCounter.history.retentionStart = windowStart;
     const stats = this.analyzer.getStats(now, since);
-    if (this.restoredRows.length) this.restoredRows = this.restoredRows.filter(record => record.ts >= now - 600000);
+    if (this.restoredRows.length) this.restoredRows = this.restoredRows.filter(record => record.ts >= windowStart);
     return buildViewerStats({
       now, displayWindow, stats, chatSince: this.chatSince, roomSince: this.roomSince,
       channelChangedAt: this.channelChangedAt, roomMode: this.rooms.get(this.channel)?.mode ?? {},
       observedEvents: this.observedEvents, persistedEvents: this.broadcastData?.checkpoint?.events || [],
       records: this.analyzer.session.records, restoredRows: this.restoredRows,
       threshold: this.settings.suspiciousThreshold, hasBroadcast: Boolean(this.broadcast),
-      formulaCoverage: this.formulaClock.snapshot(), chatCoverage: this.chatClock.snapshot(),
+      formulaCoverage: formula,
+      chatCoverage: this.chatClock.snapshot(),
       persistedChatCoverage: this.broadcastData?.checkpoint?.intervals?.chat || [],
       hasRestoredSamples: Boolean(this.restoredTab?.samples?.length),
       restoredSamples: () => this.restoredSamples(now),
@@ -619,6 +627,15 @@ export class ChatXRayApp {
 
   persistLiveState(now = Date.now()) {
     if (!this.liveReady || !this.channel || !this.tabLease || this.offline || this.clearingHistory) return;
+    if (this.pendingTabSnapshot && !this.broadcast) return;
+    const currentProfile = broadcastProfile(this.historySettings());
+    const saved = this.restoredTab;
+    const awaitingIdentity = !this.broadcast && saved?.formula.length && saved.profile;
+    const profile = awaitingIdentity ? saved.profile : currentProfile;
+    const pendingFormula = saved && saved.profile === profile &&
+      (!this.broadcast || sameLiveBroadcast(saved.identity, this.broadcast)) ? saved.formula : [];
+    const currentFormula = profile === currentProfile
+      ? this.formulaClock.snapshot(this.chatSince !== null && !this.frozen ? now : undefined) : [];
     const recent = this.viewerCounter.recentMeasurement;
     const range = this.broadcast && (this.viewerCounter.lastMeasurement?.range ? this.viewerCounter.lastMeasurement : recent);
     const events = checkpointMerge(this.broadcastData?.checkpoint ?? {}, { events: this.observedEvents }).events;
@@ -629,7 +646,7 @@ export class ChatXRayApp {
       channel: this.channel, identity: this.broadcast ?? this.restoredTab?.identity ?? null, now,
       chat: this.chatClock.snapshot(), viewer: this.viewerClock.snapshot(),
       model: range ?? this.restoredTab?.model ?? null, records,
-      formula: this.formulaClock.snapshot(), profile: broadcastProfile(this.historySettings()),
+      formula: [...pendingFormula, ...currentFormula], profile,
       events, confirmed: this.analyzer.confirmed, bonuses: this.analyzer.bonuses, samples,
     });
     if (!snapshot) return;
@@ -641,7 +658,8 @@ export class ChatXRayApp {
   }
 
   restoredSamples(now: number) {
-    const cutoff = now - this.viewerCounter.history.options.retainMs;
+    const cutoff = Math.min(now - this.viewerCounter.history.options.retainMs,
+      resumedWindow(this.formulaClock.snapshot(), now).start);
     return (this.restoredTab?.samples ?? []).concat(this.viewerCounter.history.samples)
       .filter(sample => sample.ts >= cutoff && sample.ts <= now && sample.ts > this.historyClearedAt);
   }

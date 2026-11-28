@@ -43,7 +43,10 @@ export function getStorageArea(): SettingsStorageArea | null {
         set: (items: Record<string, unknown>) => area.set(items),
       };
     }
-    return area as unknown as SettingsStorageArea;
+    return {
+      get: (key, callback) => area.get(key, callback),
+      set: (items, callback) => area.set(items, callback),
+    };
   } catch (_error) {
     return null;
   }

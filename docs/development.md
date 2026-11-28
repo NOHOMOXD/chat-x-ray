@@ -49,11 +49,13 @@ The ten account signals sum to 100; `HARD_SIGNAL_WEIGHTS.solicitation` adds
 
 Unknown account age adds zero points. The official Twitch `bot-badge` and known service logins identify service bots. Audience counts exclude them. Privileged roles in the current channel are exempt from scoring. R9K still checks repeated messages.
 
+Additional group and history signals and badge conditions are described in [How the analysis works](algorithm.md#badges-and-scores).
+
 ## Notes
 
 - The MAIN world is shared with Twitch, so `inject.js` payloads are accepted
-  only with the per-page-load token from the content script's handshake. E2E
-  asserts a forged message is dropped.
+  only with the per-page-load token from the content script's handshake. Page
+  scripts can see the token and forge messages. E2E checks rejection of a packet without the token.
 - E2E serves a local fixture at `https://www.twitch.tv/`; Chrome dropped
   `--load-extension`, so Playwright's Chromium is used.
 - Session capture schema 3: UTC timestamps, setting changes, minute summaries,

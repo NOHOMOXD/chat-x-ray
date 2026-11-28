@@ -75,11 +75,11 @@ export class MessageBridge {
     if (!('source' in data) || data.source !== POST_SOURCE ||
         !('type' in data) || data.type !== POST_TYPE ||
         !('token' in data) || data.token !== this.token ||
-        !('messages' in data) || !Array.isArray(data.messages)) return;
-    if ('sequence' in data && typeof data.sequence === 'number' && Number.isSafeInteger(data.sequence)) {
-      if (data.sequence <= this.lastSequence) return;
-      this.lastSequence = data.sequence;
-    }
+        !('version' in data) || data.version !== 1 ||
+        !('messages' in data) || !Array.isArray(data.messages) ||
+        !('sequence' in data) || typeof data.sequence !== 'number' ||
+        !Number.isSafeInteger(data.sequence) || data.sequence <= this.lastSequence) return;
+    this.lastSequence = data.sequence;
     this.receive({ source: POST_SOURCE, type: POST_TYPE, token: this.token, messages: data.messages });
   }
 }
@@ -95,5 +95,6 @@ export function isValidChatPayload(message: unknown): message is ChatPayload {
   return typeof message === 'object' && message !== null &&
     'text' in message && typeof message.text === 'string' &&
     'login' in message && typeof message.login === 'string' &&
-    message.text.length > 0 && message.text.length <= 2000;
+    message.text.length > 0 && message.text.length <= 2000 &&
+    (!('channel' in message) || typeof message.channel === 'string' && /^[a-z0-9_]{1,25}$/i.test(message.channel));
 }

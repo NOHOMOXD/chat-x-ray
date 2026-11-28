@@ -62,6 +62,7 @@ export class ChatSession<RecordType extends ChatRecord = ChatRecord> {
   readonly options: SessionOptions;
   users = new Map<string, UserState>();
   records: RecordType[] = [];
+  retentionStart = Infinity;
   private seenIds = new Map<string, number>();
   private seenQueue: Array<{ id: string; ts: number }> = [];
   private _lastUserPrune = 0;
@@ -74,6 +75,7 @@ export class ChatSession<RecordType extends ChatRecord = ChatRecord> {
   reset() {
     this.users = new Map();
     this.records = [];
+    this.retentionStart = Infinity;
     this.seenIds = new Map();
     this.seenQueue = [];
     this._lastUserPrune = 0;
@@ -139,7 +141,7 @@ export class ChatSession<RecordType extends ChatRecord = ChatRecord> {
   }
 
   prune(now: number) {
-    const cutoff = now - this.options.recentWindowMs;
+    const cutoff = Math.min(now - this.options.recentWindowMs, this.retentionStart);
 
     let expiredRecords = 0;
     while ((this.records[expiredRecords]?.ts ?? Infinity) < cutoff) {

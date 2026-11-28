@@ -4,6 +4,26 @@ import { isBroadcastIdentity, isBroadcastProfileSettings } from '../../src/analy
 import { BroadcastHistory, BROADCAST_HISTORY_KEY } from '../../src/analysis/broadcast-history.ts';
 
 describe('broadcast history input', () => {
+  it('preserves valid evidence across a save when one sample is damaged', async () => {
+    let data: Record<string, unknown> = { [BROADCAST_HISTORY_KEY]: [{ channel: 'example', id: '1', profiles: { old: [{ ts: 10, er: 1 }, { ts: 'bad', er: 2 }], other: [{ ts: 20, er: 3 }] }, checkpoint: { events: [{ kind: 'surge', ts: 30 }] } }] };
+    const store = new BroadcastHistory({ storage: {
+      get: async () => data,
+      set: async (items) => { data = { ...data, ...items }; },
+    }, locks: null });
+    await store.save({ channel: 'another', id: '2' }, { suspiciousThreshold: 30 }, {});
+    const records = await store.read();
+    expect(records.find(record => record.channel === 'example')).toMatchObject({ profiles: { old: [{ ts: 10, er: 1 }], other: [{ ts: 20, er: 3 }] }, checkpoint: { events: [{ kind: 'surge', ts: 30 }] } });
+  });
+
+  it('rejects damaged history without writing and accepts a missing key', async () => {
+    let data: Record<string, unknown> = {};
+    let writes = 0;
+    const store = new BroadcastHistory({ storage: { get: async () => data, set: async () => { writes++; } }, locks: null });
+    expect(await store.read()).toEqual([]);
+    data = { [BROADCAST_HISTORY_KEY]: 'broken' };
+    await expect(store.save({ channel: 'example', id: '1' }, { suspiciousThreshold: 30 }, {})).rejects.toThrow();
+    expect(writes).toBe(0);
+  });
   it('accepts a valid update and rejects malformed evidence', () => {
     expect(isHistoryUpdate({ samples: [{ ts: 100, er: 2 }], events: [{ kind: 'surge', ts: 100 }] })).toBe(true);
     expect(isHistoryUpdate({ samples: [{ ts: 100, er: '2' }] })).toBe(false);

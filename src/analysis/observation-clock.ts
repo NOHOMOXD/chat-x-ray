@@ -46,9 +46,11 @@ export class ObservationClock {
     this.intervals = mergeIntervals([...this.intervals, ...intervals]);
   }
 
-  snapshot(): Interval[] {
-    return this.last !== null && this.since !== null && this.last > this.since
-      ? [...this.intervals, [this.since, this.last]]
+  snapshot(now?: number): Interval[] {
+    const end = now !== undefined && this.last !== null && now >= this.last &&
+      now - this.last <= MAX_OBSERVATION_GAP ? now : this.last;
+    return end !== null && this.since !== null && end > this.since
+      ? [...this.intervals, [this.since, end]]
       : this.intervals.slice();
   }
 }

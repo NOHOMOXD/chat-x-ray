@@ -50,8 +50,8 @@ export interface Checkpoint {
 const MINUTE = 60000;
 const MAX_GROUP_WINDOWS = 240;
 
-function minuteRecords<T extends { ts: number }>(previous: T[], next: T[], select: (a: T, b: T) => T) {
-  const buckets = new Map();
+function minuteRecords<T extends { ts: number }>(previous: T[], next: T[], select: (a: T, b: T) => T): T[] {
+  const buckets = new Map<number, T>();
   for (const item of [...previous, ...next]) {
     if (!Number.isFinite(item.ts)) continue;
     const minute = Math.floor(item.ts / MINUTE);

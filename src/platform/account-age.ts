@@ -111,6 +111,7 @@ export class AccountAgeService {
     if (cached) {
       const ttl = cached.failed ? this.failedRetryMs : this.cacheTtlMs;
       if (this.now() - cached.fetchedAt < ttl) {
+        if (!cached.failed && cached.ageDays !== null) this.onAge(key, cached.ageDays);
         return false;
       }
       this.cache.delete(key);
@@ -184,7 +185,7 @@ export class AccountAgeService {
         const ageDays = this._ageDays(createdAt, fetchedAt);
         if (ageDays !== null) {
           this.cache.set(login, { ageDays, createdAt, fetchedAt, failed: false });
-          this.onAge(login, ageDays);
+          if (this.enabled) this.onAge(login, ageDays);
         } else {
           this.cache.set(login, { ageDays: null, fetchedAt, failed: true });
         }

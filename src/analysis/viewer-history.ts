@@ -79,6 +79,7 @@ function movementThreshold(a: number, b: number) {
 export class ViewerHistory {
   options: { [K in keyof typeof VIEWER_HISTORY_DEFAULTS]: number };
   samples: ViewerSample[] = [];
+  retentionStart = Infinity;
   raids: Raid[] = [];
   totalSurges = 0;
   surgeSum = 0;
@@ -105,6 +106,7 @@ export class ViewerHistory {
 
   reset() {
     this.samples = [];
+    this.retentionStart = Infinity;
     this.raids = [];
     this.totalSurges = 0;
     this.surgeSum = 0;
@@ -310,11 +312,11 @@ export class ViewerHistory {
   }
 
   _trim(now: number) {
-    const cutoff = now - this.options.retainMs;
+    const cutoff = Math.min(now - this.options.retainMs, this.retentionStart);
     while (this.samples[0] && this.samples[0].ts < cutoff) {
       this.samples.shift();
     }
-    while (this.samples.length > this.options.maxSamples) {
+    while (this.samples.length > this.options.maxSamples && this.samples[0]!.ts < this.retentionStart) {
       this.samples.shift();
     }
     const churnCutoff = now - this.options.churnWindowMs - 1000;

@@ -21,6 +21,9 @@ it('ignores a late message from the old channel and binds an accepted message on
     resetChannel: vi.fn(), recordEvent: vi.fn(),
   };
   const late = { id: 'late', login: 'viewer', text: 'hello', channel: 'old', ts: 100000 };
+  expect(processChatMessage(app, { ...late, channel: {} })).toBe(false);
+  expect(app.lastMessageChannel).toBe('');
+  expect(app.resetChannel).not.toHaveBeenCalled();
   expect(processChatMessage(app, late)).toBe(false);
   expect(addPending).not.toHaveBeenCalled();
   const current = { ...late, id: 'current', channel: 'current', receivedAt: 99900 };

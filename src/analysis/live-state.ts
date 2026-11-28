@@ -46,9 +46,12 @@ export function resumedWindow(intervals: unknown, now: number) {
   let start = now;
   let duration = 0;
   for (const [from, to] of mergeIntervals(intervals).reverse()) {
-    if (start - to > RESUME_GAP_MS || to < now - WINDOW_MS) break;
-    start = Math.max(from, now - WINDOW_MS);
-    duration += Math.max(0, Math.min(to, now) - start);
+    const end = Math.min(to, now);
+    if (start - end > RESUME_GAP_MS) break;
+    const amount = Math.min(WINDOW_MS - duration, Math.max(0, end - from));
+    start = end - amount;
+    duration += amount;
+    if (duration >= WINDOW_MS) break;
   }
   return { start, duration };
 }
@@ -88,9 +91,9 @@ export function savedRange(input: unknown, now: number) {
 
 // Restored rows are only a display window. The formula, scoring and exports of
 // newly received messages keep their current socket boundary and real inputs.
-export function observedWindow(records: ChatRecord[], restoredRows: ChatRecord[], now: number, threshold: number) {
+export function observedWindow(records: ChatRecord[], restoredRows: ChatRecord[], now: number, threshold: number, start = now - WINDOW_MS) {
   return calculateChatStats([...restoredRows, ...records],
-    { ...DEFAULTS, suspiciousThreshold: threshold }, now);
+    { ...DEFAULTS, recentWindowMs: now - start, suspiciousThreshold: threshold }, now, start);
 }
 
 const eventNumbers = ['ts', 'bucketStart', 'messages', 'authors', 'from', 'to', 'delta', 'startedAt',
@@ -117,14 +120,17 @@ function eventSummary(event: Record<string, unknown>): Record<string, unknown> {
 export function createLiveSnapshot({ channel, identity, now = Date.now(), chat, viewer, model, formula = [], profile, records = [],
   events = [], confirmed = {}, bonuses = {}, samples = [] }: LiveSnapshotInput) {
   if (!/^[a-z0-9_]{1,25}$/.test(channel)) return null;
-  const window = records.filter(record => record.ts >= now - WINDOW_MS && record.ts <= now);
+  const formulaIntervals = coverage(formula, now);
+  const start = formulaIntervals.length ? resumedWindow(formulaIntervals, now).start : now - WINDOW_MS;
+  const window = records.filter(record => record.ts >= start && record.ts <= now);
   return {
     v: VERSION, channel, identity: identity && { channel, id: identity.id ?? null, startedAt: identity.startedAt ?? null },
     savedAt: now, chat: coverage(chat, now), viewer: coverage(viewer, now), model: savedRange(model, now),
-    formula: coverage(formula, now).filter(([, end]) => end >= now - WINDOW_MS), profile,
+    formula: coverage(formula, now).filter(([, end]) => end >= start), profile,
     rows: window.map(packLiveRow),
     events: events.map(eventSummary), confirmed, bonuses,
-    samples: samples.slice(-400).map(({ ts, value, clean }) => ({ ts, value, clean })),
+    samples: samples.filter(sample => sample.ts >= start && sample.ts <= now)
+      .map(({ ts, value, clean }) => ({ ts, value, clean })),
   };
 }
 
@@ -160,8 +166,10 @@ export function restoreLiveSnapshot(input: unknown, channel: string, identity: B
       conflictingBroadcasts(identity, restoredIdentity) ||
       (identity?.startedAt && identity.startedAt > snapshot.savedAt)) return null;
   const savedRows: unknown[] = Array.isArray(snapshot.rows) ? snapshot.rows : [];
+  const formulaIntervals = coverage(snapshot.formula, now);
+  const start = formulaIntervals.length ? resumedWindow(formulaIntervals, now).start : now - WINDOW_MS;
   const rows = savedRows.filter(isSavedLiveRow)
-    .filter(row => row[1] >= now - WINDOW_MS && row[1] <= now).map(unpackLiveRow);
+    .filter(row => row[1] >= start && row[1] <= now).map(unpackLiveRow);
   return {
     ...snapshot, identity: restoredIdentity, savedAt: snapshot.savedAt, rows,
     chat: coverage(snapshot.chat, now), viewer: coverage(snapshot.viewer, now),

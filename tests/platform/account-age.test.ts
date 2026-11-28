@@ -33,3 +33,30 @@ it('reads account creation dates from an optional GQL response', async () => {
     service.clearQueue();
   }
 });
+
+it('applies a cached response after lookup is re-enabled', async () => {
+  const settings = { accountAgeLookup: true, suspiciousThreshold: 30 };
+  const ages: number[] = [];
+  let resolveFetch: (response: Response) => void = () => {};
+  let requests = 0;
+  const service = new AccountAgeService({
+    getSettings: () => settings,
+    now: () => Date.parse('2026-01-11T00:00:00Z'),
+    fetchImpl: () => { requests++; return new Promise<Response>(resolve => { resolveFetch = resolve; }); },
+    onAge: (_login, age) => ages.push(age),
+  });
+  try {
+    service.maybeLookup('viewer', 30);
+    const pending = service.flush();
+    settings.accountAgeLookup = false;
+    resolveFetch(new Response(JSON.stringify({ data: { u0: { createdAt: '2026-01-01T00:00:00Z' } } })));
+    await pending;
+    expect(ages).toEqual([]);
+    settings.accountAgeLookup = true;
+    expect(service.maybeLookup('viewer', 30)).toBe(false);
+    expect(ages).toEqual([10]);
+    expect(requests).toBe(1);
+  } finally {
+    service.clearQueue();
+  }
+});

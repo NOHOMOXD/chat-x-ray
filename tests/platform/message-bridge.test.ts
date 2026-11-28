@@ -10,13 +10,15 @@ it('accepts trusted events once and removes subscriptions when stopped', () => {
   window.addEventListener('twitch-chat-xray:handshake', onHandshake);
   const bridge = new MessageBridge(receive);
   bridge.start();
-  const payload = { source: 'twitch-chat-xray', type: 'privmsg', token, sequence: 1, messages: ['hello'] };
+  const payload = { source: 'twitch-chat-xray', type: 'privmsg', version: 1, token, sequence: 1, messages: ['hello'] };
   const send = (value: unknown) => window.dispatchEvent(new CustomEvent('twitch-chat-xray:privmsg', {
     detail: JSON.stringify(value),
   }));
   send({ ...payload, token: 'forged' });
+  send({ ...payload, version: 2 });
+  send({ ...payload, sequence: 0 });
   send(payload);
-  send(payload);
+  window.dispatchEvent(new MessageEvent('message', { source: window, data: payload }));
   expect(receive).toHaveBeenCalledTimes(1);
   expect(receive.mock.calls[0]?.[0].messages).toEqual(['hello']);
   bridge.stop();
@@ -30,5 +32,6 @@ it('checks the minimum chat fields and enforces the message length limit', () =>
   expect(isValidChatPayload({ login: 'user', text: '' })).toBe(false);
   expect(isValidChatPayload({ login: 'user', text: 'x'.repeat(2001) })).toBe(false);
   expect(isValidChatPayload({ login: 1, text: 'hello' })).toBe(false);
+  expect(isValidChatPayload({ login: 'user', text: 'hello', channel: {} })).toBe(false);
   expect(isValidChatPayload(null)).toBe(false);
 });

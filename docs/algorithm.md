@@ -2,78 +2,66 @@
 
 **English** · [Русский](ru/algorithm.md)
 
-The extension watches the chat connection and viewer counter of the Twitch tab
-you have open. Nothing is analysed on a server.
+The extension observes chat and the Twitch viewer counter in the open tab. Analysis runs on your device.
 
-## Bot score
+## Badges and scores
 
-Each suspicious sign adds points, up to 100 in total. The number in the `BOT`
-chip is that score.
+| Badge | Meaning |
+| --- | --- |
+| `BOT 45` | The score reached the threshold and a behavioural signal was found. The author counts as suspicious. |
+| `35?` | The score reached the threshold but no behavioural signal was found. The author counts toward the audience estimate. |
+| `ID` | The score is below the threshold, but the author belongs to a dense group of nearby IDs. This badge alone does not mark the author as suspicious. |
 
-- **Profile.** No chat badges, default username colour, numeric username,
-  brand-new account, first-ever message.
-- **Behaviour.** Near-identical repeats from one author, mechanical rhythm,
-  plain text with no slang or emoji, and nearby account IDs — accounts created
-  in one batch share an ID range, so two or more empty profiles close together
-  is a strong sign of a farm.
-- **Wave.** A sudden burst of messages from unbadged accounts boosts everyone
-  caught in it.
-- **Scam text.** A match for a known solicitation pattern adds 25 points.
+The default threshold is **30 points**, adjustable from 10 to 100. For example, no badges, no colour and a first message add up to 35 points and `35?`. A mechanical rhythm can then produce `BOT 40`. Confirmation lasts until the broadcast ends. Hover over a badge to see the reasons.
 
-A neutral numeric badge shows a score at or above the threshold without a behavioral trigger. These authors count toward the audience.
+Moderators, VIPs, subscribers, the broadcaster and service bots are exempt from scoring. Service bots are recognised by Twitch's `bot-badge` or a known login.
 
-Moderators, VIPs, subscribers, the broadcaster and known service bots always score 0. The repeat filter can still mute or hide messages from users with privileged roles.
+| Signal | Points | Condition |
+| --- | ---: | --- |
+| No badges | +15 | The account has no Twitch badges. |
+| No colour | +10 | Twitch did not provide a username colour. |
+| Digits in username | +10 | A long numeric suffix or a high proportion of digits. |
+| First message | +10 | Twitch marked it as the author's first message in the channel. |
+| Nearby IDs | +15 | At least two other unbadged accounts appeared in the last 10 minutes with IDs less than 50,000 away. |
+| New account | +10 | Known age under 90 days, with no badges or colour. Age lookup is off by default. |
+| Wave | +10 | An unbadged account posted during an unusual burst of such messages. |
+| Mechanical rhythm | +5 | At least three messages at nearly equal intervals. |
+| Sterile text | +5 | A long unbadged message without slang, emoji, links or mentions, subject to further text checks. |
+| Self-repetition | +10 | Several messages from the author are sufficiently similar. |
+| Scam or solicitation | +25 | An unbadged message matches a scam, sale or payment request pattern. |
+| Rare phrase in waves | +10 | The same participants repeat a rare phrase across waves. |
+| Author order | +10 | At least three participants appear in the same relative order across three waves. |
+| Phrase repeated across broadcasts | +10 | Group participants repeat a rare phrase between broadcasts. |
+| Repeated behaviour | +10 | A previously confirmed account repeats the same behavioural signal in a later broadcast. |
 
-The default threshold is **30** (10–100). A gray “35?” shows profile points. BOT also requires self-repetition, mechanical rhythm, solicitation, a recurring rare group phrase, or three authors repeating their order in three waves. Confirmation lasts until the end of the broadcast. Matching fresh behavior on a later broadcast earns 10 additional points.
+The total is capped at 100. `BOT` requires a score at the threshold and at least one behavioural signal: self-repetition, mechanical rhythm, solicitation, a repeated rare group phrase or repeated author order. Nearby IDs and wave participation add points. [Details and source code](development.md#scoring).
+
+An `ID` badge requires at least six unbadged authors in ten minutes whose IDs span less than 50,000. This differs from the +15 rule for nearby IDs.
+
+For rhythm, the average interval must be between one second and 15 minutes, with variation no greater than 8%. Self-repetition requires at least three messages with average similarity above 65%.
 
 ## Chat filter
 
-Exact repeats are matched across the last 15 minutes, near-duplicates within
-the last 1 000 messages, and short replies like `lol` more loosely. Character
-floods (`🍅🍅🍅`) are matched directly and go to the action you chose.
+R9K checks exact repeats over 15 minutes and similar messages among the last 1,000 messages in that period. The similarity threshold is 85%, or 75% for short replies. Character floods are filtered too, without adding points.
+
+R9K is on by default and mutes matches. Messages from suspicious authors are also muted by default. Either action can be set to hide in settings. R9K also applies to privileged users.
 
 ## Viewer estimate
 
-The estimate assumes that 8–12.5% of viewers write in chat over ten minutes. It counts distinct authors who were not flagged as suspicious and multiplies that count by 8 and 12.5 to get the lower and upper bounds. For shorter observations, it first scales the author count to a ten-minute window, up to fourfold. Both bounds are capped by the current Twitch count and its recent median when available.
+The model assumes that 8–12.5% of viewers write in chat over ten minutes. It multiplies the number of clean unique authors by 8 and 12.5. For example, 1,000 authors give a range of 8,000–12,500 before the cap based on Twitch's current count and its median.
 
-- One minute shows writers, messages and how the official count moved.
-- The label shows the observation duration. Observations under five minutes widen the range.
-- Ten continuous minutes give the full rating, including engagement (ER) —
-  clean authors divided by the official count. The 2.5% warning at 1 000+
-  viewers and the 6% middle band are heuristics.
+The first estimate needs **1 minute of observation, 2 clean authors and 5 audience messages**. A partial window is scaled to ten minutes, up to fourfold. The range widens below five minutes. Confidence is low below five minutes, medium below ten and high for a full window.
 
-All chat modes share one rolling estimate window, including unknown access. The popover lists active restrictions. Followers-only and unique-chat modes allow low-engagement alerts after ten minutes. Mixed and unknown windows are excluded from historical comparisons. Chat statistics show the most active author’s share over up to ten continuous minutes, excluding service bots.
+After a reload or a return to the same confirmed broadcast within two minutes, collection resumes. Time away is excluded. A longer gap starts a new window. The last compatible estimate and its age may appear until the new estimate is ready.
 
-Chat and viewers are tracked separately: overlapping periods merge, gaps count
-as nothing. A confirmed broadcast resumes its rolling chat window after gaps of up to two minutes. After longer gaps a fresh window starts, with the last compatible estimate and its age shown until a new range is ready.
+**ER** is clean authors divided by Twitch's current viewer count. After ten minutes, ER below 2.5% triggers a warning at 1,000 or more viewers. Below 6% gives an informational signal. The check applies to open and followers-only chat when the window has no mode changes and slow mode and emote-only are off. Unique-chat mode alone does not block it.
 
-## History
+The estimate is approximate. Viewers who do not write are not directly observed, and low ER alone does not prove viewbotting.
 
-With a known stream ID or start time, one engagement sample per minute is kept
-for up to 20 broadcasts per channel. Only broadcasts with the same threshold,
-account-age setting, room mode and scoring version are compared. A historical match cannot clear a low-engagement warning. The previous broadcast is
-shown at once; from five, the median and middle 50% range appear.
+## Events and history
 
-## Viewer anomalies
+A surge or outflow is recorded when a viewer-count change lasts 15 seconds and reaches `max(500, min(3000, 0.30 × min(A, B)))`. The reference is a median of at least three readings over 15–20 seconds within the previous two minutes. Recovery within five minutes is linked to the drop.
 
-A rise or drop must exceed or equal the same threshold in either direction: `max(500, min(3000, 0.30 × min(A, B)))`. The reference is a median over up to 20 seconds within the previous two minutes, with at least three readings spanning 15 seconds. The change must persist for 15 seconds. Recovery within five minutes belongs to the original drop.
+The viewer counter turns red for a wave, low ER or a recent viewer-count anomaly. The chat bar separately warns about waves and a high share of suspicious authors. The share uses the same numeric threshold as the score: at a setting of 30, the warning starts at 30% of authors.
 
-The chat bar and counter have their own colours: grey while data is not ready,
-green when ready, red for a low ER, an anomaly in the last 15 minutes or a
-suspicious share of authors above your threshold.
-
-## Known limits
-
-- The estimate is an educated guess, not a measurement.
-- A viewbot that only watches the video never appears in chat; a low ER alone
-  proves nothing.
-- Account age is used only when known.
-- If Twitch moves chat off the page connection, the chat analysis sees nothing.
-
-## Related features
-
-- Audit export of every flagged account, and a JSON session recording with
-  minute summaries, viewer samples and telemetry.
-- Dense ID groups, useful when a farm uses a contiguous block of IDs.
-
-Details and the exact weights: [Development](development.md).
+When the stream ID or start time is known, up to 20 broadcasts are stored per channel. Comparisons use compatible settings and chat modes. From five broadcasts, the median and middle 50% are shown. Audit export and JSON session recording are available. If the chat connection is unavailable to the page, messages stop reaching the analysis.

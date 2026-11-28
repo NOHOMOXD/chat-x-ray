@@ -24,17 +24,23 @@ interface StoredBroadcast extends BroadcastIdentity {
   updatedAt?: number;
 }
 
-function isStoredBroadcast(value: unknown): value is StoredBroadcast {
-  if (!isObject(value) || typeof value.channel !== 'string' || !isObject(value.profiles) ||
-      !isObject(value.checkpoint)) return false;
-  if (value.id != null && typeof value.id !== 'string') return false;
-  if (value.startedAt != null && typeof value.startedAt !== 'number') return false;
-  if (value.firstObservedAt != null && typeof value.firstObservedAt !== 'number') return false;
-  if (value.updatedAt != null && typeof value.updatedAt !== 'number') return false;
-  const profilesValid = Object.values(value.profiles).every(samples => Array.isArray(samples) &&
-    samples.every(sample => isObject(sample) && typeof sample.ts === 'number' && typeof sample.er === 'number'));
-  return profilesValid;
-
+function readStoredBroadcast(value: unknown): StoredBroadcast | null {
+  if (!isObject(value) || typeof value.channel !== 'string') return null;
+  const id = typeof value.id === 'string' && value.id ? value.id : null;
+  const startedAt = typeof value.startedAt === 'number' && Number.isFinite(value.startedAt) ? value.startedAt : null;
+  if (!id && startedAt === null) return null;
+  const profiles: Record<string, TimedSample[]> = {};
+  if (isObject(value.profiles)) {
+    for (const [key, samples] of Object.entries(value.profiles)) {
+      if (Array.isArray(samples)) profiles[key] = samples.filter((sample): sample is TimedSample =>
+        isObject(sample) && typeof sample.ts === 'number' && Number.isFinite(sample.ts) &&
+        typeof sample.er === 'number' && Number.isFinite(sample.er) && sample.er >= 0);
+    }
+  }
+  return { channel: value.channel, id, startedAt, profiles,
+    checkpoint: isObject(value.checkpoint) ? value.checkpoint : {},
+    ...(typeof value.firstObservedAt === 'number' && Number.isFinite(value.firstObservedAt) ? { firstObservedAt: value.firstObservedAt } : {}),
+    ...(typeof value.updatedAt === 'number' && Number.isFinite(value.updatedAt) ? { updatedAt: value.updatedAt } : {}) };
 }
 
 function validIdentity(identity: BroadcastIdentity | null | undefined) {
@@ -63,15 +69,17 @@ export class BroadcastHistory {
     if (!this.storage) return this.memory;
     if (!this.storage.get) throw new Error('History storage cannot be read');
     const result = await callStorage(this.storage.get.bind(this.storage), [BROADCAST_HISTORY_KEY, HISTORY_CLEAR_KEY]);
-    if (!isObject(result)) return [];
+    if (!isObject(result)) throw new Error('Invalid history storage response');
     const clearedAt = result[HISTORY_CLEAR_KEY];
     this.clearedAt = typeof clearedAt === 'number' && Number.isFinite(clearedAt) ? clearedAt : 0;
     const records = result[BROADCAST_HISTORY_KEY];
-    return Array.isArray(records) ? records.filter(isStoredBroadcast).map(record => ({
+    if (records === undefined) return [];
+    if (!Array.isArray(records)) throw new Error('Invalid broadcast history');
+    return records.map(readStoredBroadcast).filter((record): record is StoredBroadcast => record !== null).map(record => ({
       ...record,
       checkpoint: checkpointMerge(readCheckpoint(record.checkpoint)),
       updatedAt: record.updatedAt ?? 0,
-    })) : [];
+    }));
   }
 
   async write(records: BroadcastRecord[]) {

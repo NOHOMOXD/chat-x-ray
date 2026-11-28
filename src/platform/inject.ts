@@ -30,14 +30,8 @@ type BroadcastEvent = ({ kind: 'broadcast-identity' } & BroadcastIdentity) | { k
   const textDecoder = typeof TextDecoder === 'function' ? new TextDecoder('utf-8') : null;
 
   /*
-   * Bridge authentication.
-   *
-   * The MAIN world is shared with Twitch and every other extension script, so
-   * a plain CustomEvent on window is forgeable: any page script could post
-   * fake PRIVMSGs and make the extension badge innocent users. The isolated
-   * content script therefore generates a random nonce per page load and hands
-   * it over in a handshake; every payload carries it and the content script
-   * silently drops anything else.
+   * The token identifies the current bridge connection. Page scripts can see
+   * it and can forge events, so consumers must validate all received data.
    */
   const HANDSHAKE_EVENT = 'twitch-chat-xray:handshake';
   let bridgeToken: string | null = null;

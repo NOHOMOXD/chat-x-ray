@@ -12,8 +12,8 @@ Everything works on your computer.
 - **Not stored:** chat messages live in tab memory only, unless you export a
   session. The downloaded JSON is never read back.
 - **In-page transfer:** the extension passes messages between its own scripts
-  inside the page, guarded by a random token per page load, so other page
-  scripts cannot inject fake chat.
+  inside the page, with a random token per page load. Scripts on the page can see the token
+  and can forge chat messages.
 
 ## The one optional request
 

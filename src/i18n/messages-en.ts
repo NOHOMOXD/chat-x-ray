@@ -291,7 +291,7 @@ export const messagesEn = {
     'options.data': 'Data and language',
     'options.exportHint': 'Download the audit log and recording from the chat settings on the stream page.',
     'options.weights': 'Score breakdown',
-    'options.scoreHelp': 'A BOT label requires a score at or above the threshold and self-repetition, mechanical timing or a solicitation match. Hover over the badge before a username to see which signals contributed.',
+    'options.scoreHelp': 'BOT requires a score at the threshold and a behavioural signal: self-repetition, timing, solicitation, a repeated group phrase or author order. Hover over a badge for details.',
     'options.repeatHelp': 'R9K detects repeated or similar messages and runs of identical characters. It can dim a message even when its chatter has no BOT badge.',
     'options.estimateHelp': 'The model assumes that 8–12.5% of viewers write in ten minutes. For example, 1,000 unique chatters passing the filter yield an estimate of 8,000–12,500 viewers before applying the lower of the current and median Twitch counts as a cap. Participation varies by stream.',
     'options.heading': 'Settings',

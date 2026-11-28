@@ -179,14 +179,9 @@ export function buildViewerTooltip(input: unknown) {
     list.appendChild(row(t('tip.lastMeasurementLabel'), eventTime(model.sampledAt)));
   } else {
     list.appendChild(row(t('tip.observationLabel'), duration));
-    // While a restored estimate is on screen its window belongs to the previous
-    // page load: the live window has just started, so quoting "0 of 10 min"
-    // next to a saved range would read like a restart.
-    if (model.recentAge == null) {
-      list.appendChild(row(t('tip.viewer.window'), t(
-        covered === 10 ? 'tip.sliding' : 'tip.covered', { minutes: covered }
-      )));
-    }
+    list.appendChild(row(t('tip.viewer.window'), t(
+      covered === 10 ? 'tip.sliding' : 'tip.covered', { minutes: covered }
+    )));
   }
   if (!model.stale && model.chatAlert && !model.waveAlert && model.activeUsers) {
     list.appendChild(row(t('tip.chatAlertLabel'), t('tip.chatAlertValue', {

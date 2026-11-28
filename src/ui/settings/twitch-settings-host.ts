@@ -10,7 +10,6 @@ const SETTINGS_PANEL_SELECTORS = [
   '[data-test-selector="chat-settings-menu"]',
   '.chat-settings-menu',
   '.chat-settings__content',
-  '[role="dialog"][aria-labelledby]',
 ];
 const SETTINGS_ROW_SELECTOR = 'button, [role="menuitem"], [role="button"], a';
 
@@ -48,6 +47,12 @@ export function findSettingsMenuHost() {
       }
       return resolveRowContainer(panel);
     }
+  }
+  const controlledId = gear.getAttribute('aria-controls');
+  const dialog = controlledId ? document.getElementById(controlledId) : null;
+  if (dialog?.matches('[role="dialog"]') && dialog.isConnected) {
+    const rect = dialog.getBoundingClientRect();
+    if (rect.width >= 160 && rect.height >= 80) return resolveRowContainer(dialog);
   }
   return null;
 }

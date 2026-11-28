@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { ChatSession } from '../../src/core/chat-session.ts';
+import { ObservationClock } from '../../src/analysis/observation-clock.ts';
 import {
   createLiveSnapshot, restoreLiveSnapshot, observedWindow, savedRange, sameLiveBroadcast, resumedWindow,
 } from '../../src/analysis/live-state.ts';
@@ -51,6 +52,53 @@ it('preserves the original measurement time, even across a second reload', () =>
 it('continues through two minutes away without counting the gap', () => {
   expect(resumedWindow([[1000, 121000], [241000, 242000]], 242000)).toEqual({ start: 1000, duration: 121000 });
   expect(resumedWindow([[1000, 121000], [241001, 242001]], 242001)).toEqual({ start: 241001, duration: 1000 });
+});
+
+it('keeps a full observed window across multiple short gaps and a return', () => {
+  const intervals: Array<[number, number]> = [[0, 327921], [329614, 340775], [342255, 741401]];
+  const window = resumedWindow(intervals, 741401);
+  expect(window.duration).toBe(600000);
+  expect(window.start).toBe(138228);
+  expect(resumedWindow([...intervals, [831401, 831402]], 831402).duration).toBe(600000);
+  expect(resumedWindow([...intervals, [861402, 861403]], 861403)).toEqual({ start: 861402, duration: 1 });
+});
+
+it('restores rows older than ten wall-clock minutes inside the observed window', () => {
+  const now = 690000;
+  const formula = [[0, 360000], [450000, now]];
+  const row = { id: 'old', ts: 20000, receivedAt: 20000, userKey: 'same', botScore: 0 };
+  const snapshot = createLiveSnapshot({ ...base, now, formula, records: [row],
+    samples: [{ ts: 20000, value: 100 }] });
+  const restored = restoreLiveSnapshot(snapshot, 'example', identity, now + 1000);
+  expect(restored?.rows.map(record => record.id)).toEqual(['old']);
+  expect(restored?.samples).toEqual([{ ts: 20000, value: 100, clean: undefined }]);
+  expect(resumedWindow(formula, now).duration).toBe(600000);
+  expect(observedWindow([{ ...row, id: 'new', ts: 680000, receivedAt: 680000 }], restored!.rows,
+    now, 30, resumedWindow(formula, now).start)).toMatchObject({ activeUsers: 1, windowMessages: 2 });
+});
+
+it('keeps reload gaps out of the rolling window duration', () => {
+  const now = 1795793856660;
+  const first = 1795793462381;
+  const second = 1795793464314;
+  expect(resumedWindow([[now - 700000, first], [second, now - 345]], now))
+    .toEqual({ start: now - 600000 - (second - first) - 345, duration: 600000 });
+  expect(resumedWindow([[now - 700000, first], [second + 10000, now]], now).duration)
+    .toBe(600000);
+  expect(resumedWindow([[now - 599000, first], [second, now]], now).duration)
+    .toBe(599000 - (second - first));
+});
+
+it('counts an active interval up to the model time without filling a reload gap', () => {
+  const clock = new ObservationClock();
+  clock.includeCoverage([[0, 300000]]);
+  clock.observe(302000);
+  for (let time = 360000; time < 899900; time += 50000) clock.observe(time);
+  clock.observe(899900);
+  const now = 900000;
+  expect(resumedWindow(clock.snapshot(now), now)).toEqual({ start: 298000, duration: 600000 });
+  expect(resumedWindow(clock.snapshot(now + 2000), now + 2000)).toEqual({ start: 302000, duration: 600000 });
+  expect(clock.snapshot(960001)).toEqual([[0, 300000], [302000, 899900]]);
 });
 
 it('counts live and restored rows with the same rolling-window rules', () => {

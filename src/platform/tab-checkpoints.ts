@@ -39,7 +39,7 @@ function asEntries(value: unknown): Record<string, CheckpointEntry> {
 function isTabSnapshot(value: unknown): value is TabSnapshot {
   return Boolean(value && typeof value === 'object' &&
     'channel' in value && typeof value.channel === 'string' &&
-    'savedAt' in value && typeof value.savedAt === 'number' && Number.isFinite(value.savedAt));
+    'savedAt' in value && typeof value.savedAt === 'number' && Number.isFinite(value.savedAt) && value.savedAt <= Date.now());
 }
 
 
@@ -49,10 +49,20 @@ export class TabCheckpoints {
 
   constructor(private readonly storage: chrome.storage.StorageArea, private readonly promiseAPI: boolean) {}
 
-  call(method: 'get' | 'set' | 'remove', argument: unknown): Promise<unknown> {
-    const fn = this.storage[method] as unknown as (argument: unknown, callback?: (value: unknown) => void) => unknown;
-    return this.promiseAPI ? Promise.resolve(fn.call(this.storage, argument))
-      : callStorage(fn.bind(this.storage), argument);
+  call(method: 'get', argument: string | string[] | null): Promise<unknown>;
+  call(method: 'set', argument: Record<string, unknown>): Promise<unknown>;
+  call(method: 'remove', argument: string | string[]): Promise<unknown>;
+  call(method: 'get' | 'set' | 'remove', argument: string | string[] | Record<string, unknown> | null): Promise<unknown> {
+    if (method === 'get') {
+      const key = argument as string | string[] | null;
+      return this.promiseAPI ? this.storage.get(key) : callStorage((value, callback) => this.storage.get(value, callback), key);
+    }
+    if (method === 'set') {
+      const items = argument as Record<string, unknown>;
+      return this.promiseAPI ? this.storage.set(items) : callStorage((value, callback) => this.storage.set(value, () => callback(undefined)), items);
+    }
+    const keys = argument as string | string[];
+    return this.promiseAPI ? this.storage.remove(keys) : callStorage((value, callback) => this.storage.remove(value, () => callback(undefined)), keys);
   }
 
   run<T>(operation: () => Promise<T>): Promise<T> {
